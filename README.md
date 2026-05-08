@@ -1,0 +1,2 @@
+# re-GeLaCo
+Prezentacijski seminar
