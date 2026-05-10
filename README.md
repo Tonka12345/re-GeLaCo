@@ -37,11 +37,12 @@ re-GeLaCo/
 ### 1. SSH into Supek
 
 ```bash
-ssh tsegvic@login-gpu.hpc.srce.hr (or your username)
+ssh tsegvic@login-gpu.hpc.srce.hr
 ```
+(replace tsegvic with your username)
 
 
-###2. Configure ~/.bashrc (do this once)
+### 2. Configure ~/.bashrc (do this once)
 
 #### 2.1 Set up proxy (required for internet access)
 
@@ -76,7 +77,7 @@ huggingface-cli login
 ### 3. Model caching
 
 By default, HuggingFace caches models in `~/.cache/huggingface/`.
-To change that set HF_HOME environment variable.
+If you want to change that set HF_HOME environment variable.
 
 Example:
 
