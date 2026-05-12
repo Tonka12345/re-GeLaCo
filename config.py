@@ -32,7 +32,7 @@ NUM_ORIGINAL_LAYERS = 32
 # =============================================================================
 DATASET_NAME = "wikimedia/wikipedia"
 DATASET_CONFIG = "20231101.en"
-NUM_CALIBRATION_SENTENCES = 4  # Start small; scale to 64 later
+NUM_CALIBRATION_SENTENCES = 64  # Start small; scale to 64 later
 MAX_SENTENCE_LENGTH = 128      # Max tokens per sentence
 RANDOM_SEED = 42
 

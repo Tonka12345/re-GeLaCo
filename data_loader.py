@@ -46,7 +46,6 @@ def load_calibration_sentences(
         DATASET_CONFIG,
         split="train",
         streaming=True,
-        trust_remote_code=True,
     )
 
     # Collect candidate sentences from articles

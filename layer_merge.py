@@ -101,6 +101,12 @@ def remove_collapsed_layers(model, base: int, end: int) -> None:
     new_count = len(model.model.layers)
     model.config.num_hidden_layers = new_count
 
+    # Re-index remaining layers so cache updates work properly
+    for idx, layer in enumerate(model.model.layers):
+        layer.layer_idx = idx
+        if hasattr(layer, "self_attn") and hasattr(layer.self_attn, "layer_idx"):
+            layer.self_attn.layer_idx = idx
+
     print(f"[LayerMerge] Removed {num_to_remove} layers: "
           f"{original_count} → {new_count} layers")
 

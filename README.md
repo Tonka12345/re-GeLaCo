@@ -115,7 +115,7 @@ qsub -I -q gpu -l select=1:ncpus=8:ngpus=1:mem=64GB -l walltime=02:00:00
 
 export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
-export HF_TOKEN="hf_YOUR_TOKEN_HERE"
+export HF_TOKEN="YOUR_TOKEN_HERE"
 export HF_HOME="/lustre/home/tsegvic/.hf_cache"
 
 cd ~/re-GeLaCo
