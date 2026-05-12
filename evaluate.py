@@ -73,7 +73,7 @@ def main():
     try:
         original_model = AutoModelForCausalLM.from_pretrained(
             MODEL_NAME,
-            torch_dtype=torch_dtype,
+            dtype=torch_dtype,
             device_map=DEVICE,
             low_cpu_mem_usage=True,
         )

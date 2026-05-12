@@ -96,9 +96,20 @@ def load_calibration_sentences(
         preview = sent[:80] + "..." if len(sent) > 80 else sent
         print(f"  [{i}] {preview}")
 
+    # Explicitly delete the dataset iterator and run GC to prevent PyArrow
+    # C++ threads from crashing when the Python GIL is released on shutdown.
+    del dataset
+    import gc
+    gc.collect()
+
     return selected
 
 
 if __name__ == "__main__":
     sentences = load_calibration_sentences()
     print(f"\nTotal sentences loaded: {len(sentences)}")
+    
+    # Force exit to prevent PyArrow background thread segfaults during 
+    # Python runtime finalization when this script is run standalone.
+    import os
+    os._exit(0)

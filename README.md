@@ -73,17 +73,14 @@ huggingface-cli login
 
 > **Note**: You need to accept the Llama-2 license at
 > https://huggingface.co/meta-llama/Llama-2-7b-hf before downloading.
+> By default, HuggingFace caches models in `~/.cache/huggingface/`
 
-### 3. Model caching
+### 3. Set python versions
 
-By default, HuggingFace caches models in `~/.cache/huggingface/`.
-If you want to change that set HF_HOME environment variable.
-
-Example:
+By default python version is 3.6, we need python 3.11.7:
 
 ```bash
-export HF_HOME="/lustre/home/tsegvic/.hf_cache"
-mkdir -p $HF_HOME
+module load cray-python/3.11.7
 ```
 
 ### 4. Clone the repository
@@ -92,6 +89,7 @@ mkdir -p $HF_HOME
 cd ~
 git clone https://github.com/Tonka12345/re-GeLaCo.git
 cd re-GeLaCo
+git checkout evaluation-testing
 ```
 
 ### 5. Create virtual environment
