@@ -1,0 +1,124 @@
+#!/bin/bash
+#PBS -N gelaco-evo
+#PBS -q gpu
+#PBS -l select=1:ncpus=8:ngpus=1:mem=80GB
+#PBS -l walltime=72:00:00
+#PBS -j oe
+
+# ============================================================================
+# GeLaCo NSGA-II — full evolutionary search on Supek (PBS)
+# ----------------------------------------------------------------------------
+# Co-runs:
+#   1. server.py  — Python persistent evaluator (loads Llama-2-7B once)
+#   2. gelaco_ecf — C++ NSGA-II driver (compiled from ecf/)
+# Communication: two named FIFOs in /tmp, qualified by $PBS_JOBID so multiple
+# jobs on the same node never collide.
+# Synchronization: server.py writes $GELACO_READY_FILE once the model is
+# loaded and FIFOs are open; the launcher polls that file before exec'ing ECF.
+# ============================================================================
+
+set -u
+
+# --- Required network access on Supek worker nodes --------------------------
+export http_proxy="http://10.150.1.1:3128"
+export https_proxy="http://10.150.1.1:3128"
+
+# HF_TOKEN must be inherited from ~/.bashrc. Sanity check:
+if [ -z "${HF_TOKEN:-}" ]; then
+    echo "ERROR: HF_TOKEN not set. Add 'export HF_TOKEN=...' to ~/.bashrc." >&2
+    exit 1
+fi
+
+# --- ECF runtime needs the shared lib on its path ---------------------------
+: "${ECF_ROOT:=$HOME/ecf-install}"
+export LD_LIBRARY_PATH="$ECF_ROOT/lib:${LD_LIBRARY_PATH:-}"
+
+cd "$PBS_O_WORKDIR"
+module load cray-python/3.11.7
+source venv/bin/activate
+
+# --- Per-job FIFO/READY paths (cleaned up at the end) -----------------------
+REQ="/tmp/gelaco_req.$PBS_JOBID"
+RSP="/tmp/gelaco_rsp.$PBS_JOBID"
+READY="/tmp/gelaco_ready.$PBS_JOBID"
+rm -f "$REQ" "$RSP" "$READY"
+mkfifo "$REQ" "$RSP"
+
+export GELACO_REQ_FIFO="$REQ"
+export GELACO_RSP_FIFO="$RSP"
+export GELACO_READY_FILE="$READY"
+
+echo "============================================"
+echo "GeLaCo NSGA-II"
+echo "============================================"
+echo "Job ID:    $PBS_JOBID"
+echo "Node:      $(hostname)"
+echo "Date:      $(date)"
+echo "Workdir:   $(pwd)"
+echo "REQ FIFO:  $REQ"
+echo "RSP FIFO:  $RSP"
+echo "READY:     $READY"
+echo "ECF_ROOT:  $ECF_ROOT"
+echo ""
+nvidia-smi || true
+echo "============================================"
+
+# --- Cleanup hook -----------------------------------------------------------
+cleanup() {
+    echo "[cleanup] tearing down"
+    # Politely ask the server to quit, then wait briefly.
+    if [ -n "${PY_PID:-}" ] && kill -0 "$PY_PID" 2>/dev/null; then
+        # The FIFO writer may block if no reader; use a timeout-safe approach.
+        ( echo "QUIT" > "$REQ" ) &
+        QUITTER=$!
+        wait $QUITTER 2>/dev/null || true
+        # Give it 30 s to exit, then SIGTERM, then SIGKILL.
+        for i in $(seq 1 30); do
+            kill -0 "$PY_PID" 2>/dev/null || break
+            sleep 1
+        done
+        kill -0 "$PY_PID" 2>/dev/null && kill "$PY_PID" 2>/dev/null
+        sleep 2
+        kill -0 "$PY_PID" 2>/dev/null && kill -9 "$PY_PID" 2>/dev/null
+    fi
+    rm -f "$REQ" "$RSP" "$READY"
+}
+trap cleanup EXIT INT TERM
+
+# --- Start Python server in background --------------------------------------
+echo "[launch] starting server.py"
+python server.py > server.log 2>&1 &
+PY_PID=$!
+echo "[launch] server PID=$PY_PID; logs → server.log"
+
+# --- Wait for READY (model load can take ~60–120 s) -------------------------
+echo "[launch] waiting for $READY ..."
+for i in $(seq 1 180); do      # up to 15 min
+    if [ -f "$READY" ]; then
+        echo "[launch] server is ready after ${i} polls"
+        break
+    fi
+    if ! kill -0 "$PY_PID" 2>/dev/null; then
+        echo "ERROR: server.py died before becoming ready. Last log:" >&2
+        tail -n 80 server.log >&2 || true
+        exit 1
+    fi
+    sleep 5
+done
+if [ ! -f "$READY" ]; then
+    echo "ERROR: timed out waiting for server.py to become ready" >&2
+    tail -n 80 server.log >&2 || true
+    exit 1
+fi
+
+# --- Run ECF (long-running, foreground) -------------------------------------
+echo "[launch] starting ECF NSGA-II"
+./ecf/gelaco_ecf ecf/parameters.txt
+ECF_RC=$?
+echo "[launch] ECF exited with code $ECF_RC"
+
+# --- Shutdown handled by trap -----------------------------------------------
+echo "============================================"
+echo "Job completed at: $(date)"
+echo "============================================"
+exit $ECF_RC

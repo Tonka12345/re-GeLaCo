@@ -40,3 +40,15 @@ RANDOM_SEED = 42
 # Device Configuration
 # =============================================================================
 DEVICE = "cuda"  # Use "cpu" for testing without GPU
+
+# =============================================================================
+# Server / IPC Configuration (used by server.py)
+# =============================================================================
+# Paths are taken from environment variables when set (the PBS job script
+# generates per-job FIFO paths under /tmp); the defaults below are convenient
+# for interactive smoke testing.
+import os as _os
+
+FIFO_REQ_PATH = _os.environ.get("GELACO_REQ_FIFO", "/tmp/gelaco_req")
+FIFO_RSP_PATH = _os.environ.get("GELACO_RSP_FIFO", "/tmp/gelaco_rsp")
+READY_FILE    = _os.environ.get("GELACO_READY_FILE", "/tmp/gelaco_ready")

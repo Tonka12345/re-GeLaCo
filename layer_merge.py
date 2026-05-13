@@ -1,17 +1,21 @@
 """
-GeLaCo Prototype — Layer Merge Operations
-===========================================
-Implements the differential weight merging from the GeLaCo paper.
+GeLaCo — Layer Merge Operations
+================================
+Implements differential weight merging from the GeLaCo paper (arXiv:2507.10059).
 
-The paper follows LaCo (Yang et al., 2024b) for the merge formula:
-   θ*_base = θ_base + Σ_{k=1}^{end-base} (θ_{base+k} - θ_base)
+Merge formula (§3.1, faithful to LaCo, Yang et al., 2024b):
+    θ*_base = θ_base + Σ_{k=1}^{end-base} (θ_{base+k} - θ_base)
 
-After merging weights, the collapsed layers are removed from the model.
+Layer mapping ψ (§3.1) is implemented iteratively, per-operation, so overlapping
+or redundant merges in a genotype collapse correctly to no-ops via the paper's
+dynamic remapping (rather than the simpler cumulative-offset shortcut, which
+diverges from the paper for overlapping operations).
 """
 
-import copy
 import torch
 import torch.nn as nn
+
+from config import NUM_ORIGINAL_LAYERS
 
 
 def apply_differential_merge(model, base: int, end: int) -> None:
@@ -111,115 +115,152 @@ def remove_collapsed_layers(model, base: int, end: int) -> None:
           f"{original_count} → {new_count} layers")
 
 
-def apply_merge_operations(model, merge_ops: list[tuple[int, int, int]]) -> dict[int, int]:
+def _replay_psi(
+    merge_ops: list[tuple[int, int, int]],
+    num_original_layers: int,
+) -> tuple[list[int], list[tuple[int, int]]]:
     """
-    Apply a list of merge operations sequentially and return the layer mapping.
+    Replay the paper's dynamic ψ mapping over the given merge operations.
 
-    Each operation is (base, end, active):
-    - base: starting layer index (in original model indexing)
-    - end: ending layer index (inclusive, in original model indexing)
-    - active: 1 to apply, 0 to skip
+    Returns:
+        psi: final ψ array of length num_original_layers (original → compressed idx).
+        effective_ops: list of (compressed_base, compressed_end) pairs actually applied,
+                       in genotype order. Used for canonical caching.
+    """
+    L = num_original_layers
+    psi = list(range(L))
+    effective_ops: list[tuple[int, int]] = []
+
+    for b, e, a in merge_ops:
+        if a != 1 or e <= b or b < 0 or e >= L:
+            continue
+        cb, ce = psi[b], psi[e]
+        if ce <= cb:
+            # Layers already collapsed by a prior op — this op degenerates to no-op
+            continue
+        effective_ops.append((cb, ce))
+        delta = ce - cb
+        for j in range(L):
+            if b <= j <= e:
+                psi[j] = cb
+            elif j > e:
+                psi[j] = max(0, psi[j] - delta)
+
+    return psi, effective_ops
+
+
+def apply_merge_operations(
+    model,
+    merge_ops: list[tuple[int, int, int]],
+    num_original_layers: int = NUM_ORIGINAL_LAYERS,
+) -> dict[int, int]:
+    """
+    Apply a genotype of merge operations using the paper's iterative ψ mapping (§3.1).
+
+    Each operation is (b, e, a):
+    - b, e: base and end layer indices in ORIGINAL model indexing.
+    - a: activation flag, 1 to apply, 0 to skip.
+
+    Operations are applied in genotype order (NOT sorted). For each active op,
+    the current ψ is used to map (b, e) → (cb, ce) in the *currently compressed*
+    model. If the mapped interval has zero length (because a prior op already
+    collapsed it), the op is silently skipped — matching the paper's behavior.
 
     Returns:
         layer_mapping: dict mapping original layer index → compressed layer index.
     """
-    # Filter active operations
-    active_ops = [(b, e) for b, e, a in merge_ops if a == 1 and e > b]
+    L = num_original_layers
+    psi = list(range(L))
+    applied = 0
 
-    if not active_ops:
-        print("[LayerMerge] No active merge operations to apply")
-        num_layers = len(model.model.layers)
-        return {i: i for i in range(num_layers)}
-
-    # Sort operations by base index (process from first to last)
-    active_ops.sort(key=lambda x: x[0])
-
-    print(f"[LayerMerge] Applying {len(active_ops)} merge operations: {active_ops}")
-
-    # Build layer mapping BEFORE modifying the model
-    # This maps original layer indices → compressed layer indices
-    original_num_layers = len(model.model.layers)
-    layer_mapping = build_layer_mapping(original_num_layers, active_ops)
-
-    # Apply operations sequentially with index adjustment
-    # As we remove layers, indices shift, so we track cumulative offset
-    cumulative_removed = 0
-    for base_orig, end_orig in active_ops:
-        # Adjust indices for previously removed layers
-        base_adj = base_orig - cumulative_removed
-        end_adj = end_orig - cumulative_removed
-
-        # Safety check
-        if base_adj < 0 or end_adj >= len(model.model.layers):
-            print(f"[LayerMerge] WARNING: Skipping invalid adjusted operation "
-                  f"({base_adj}, {end_adj}), model has {len(model.model.layers)} layers")
+    for b, e, a in merge_ops:
+        if a != 1 or e <= b or b < 0 or e >= L:
+            continue
+        cb, ce = psi[b], psi[e]
+        if ce <= cb:
             continue
 
-        # Apply merge + remove
-        apply_differential_merge(model, base_adj, end_adj)
-        remove_collapsed_layers(model, base_adj, end_adj)
+        apply_differential_merge(model, cb, ce)
+        remove_collapsed_layers(model, cb, ce)
+        delta = ce - cb
+        for j in range(L):
+            if b <= j <= e:
+                psi[j] = cb
+            elif j > e:
+                psi[j] = max(0, psi[j] - delta)
+        applied += 1
 
-        num_removed = end_orig - base_orig
-        cumulative_removed += num_removed
+    if applied == 0:
+        print("[LayerMerge] No effective merge operations applied")
+    else:
+        print(f"[LayerMerge] Applied {applied} effective operation(s); "
+              f"final model has {len(model.model.layers)} layers")
 
-    print(f"[LayerMerge] Final model has {len(model.model.layers)} layers")
-    return layer_mapping
+    return {j: psi[j] for j in range(L)}
+
+
+def canonical_effective_ops(
+    merge_ops: list[tuple[int, int, int]],
+    num_original_layers: int = NUM_ORIGINAL_LAYERS,
+) -> list[tuple[int, int]]:
+    """
+    Return the list of effective (compressed_base, compressed_end) merges that
+    a given genotype would actually apply, in order. This is the canonical
+    representation used for cache deduplication: many genotypes collapse to
+    the same effective op list and must share a cache entry.
+    """
+    _, effective = _replay_psi(merge_ops, num_original_layers)
+    return effective
 
 
 def build_layer_mapping(
     num_original_layers: int,
-    active_ops: list[tuple[int, int]],
+    merge_ops: list[tuple[int, int, int]],
 ) -> dict[int, int]:
     """
-    Build the mapping ϕ from original layer indices to compressed layer indices.
-
-    For a merge (base, end):
-    - ϕ(i) = i (for i < base, adjusted for prior merges)
-    - ϕ(i) = base (for base ≤ i ≤ end, all map to base)
-    - ϕ(i) = i - (end - base) (for i > end, shifted down)
-
-    This accounts for cumulative structural changes from multiple merges,
-    as described in Section 3.2 of the paper.
-
-    Args:
-        num_original_layers: Total layers in original model.
-        active_ops: List of (base, end) tuples, sorted by base.
-
-    Returns:
-        Dict mapping each original layer index to its compressed layer index.
+    Compute ψ without touching a model. Accepts full (b, e, a) triples so the
+    caller does not have to pre-filter.
     """
-    mapping = {i: i for i in range(num_original_layers)}
-
-    cumulative_shift = 0
-    for base, end in active_ops:
-        num_removed = end - base
-        for i in range(num_original_layers):
-            if base <= i <= end:
-                # All merged layers map to the base layer's position
-                mapping[i] = base - cumulative_shift
-            elif i > end:
-                # Layers after the merge are shifted down
-                mapping[i] = mapping[i] - num_removed
-        cumulative_shift += num_removed
-
-    print(f"[LayerMerge] Layer mapping (original → compressed):")
-    # Print a compact summary
-    for i in range(num_original_layers):
-        marker = " (merged)" if any(b <= i <= e for b, e in active_ops) else ""
-        print(f"  layer {i:2d} → compressed layer {mapping[i]:2d}{marker}")
-
-    return mapping
+    psi, _ = _replay_psi(merge_ops, num_original_layers)
+    return {j: psi[j] for j in range(num_original_layers)}
 
 
 if __name__ == "__main__":
-    # Quick test of layer mapping logic (no model needed)
-    print("Testing layer mapping for merge (5, 7):")
-    mapping = build_layer_mapping(32, [(5, 7)])
+    # Single-merge regression: matches prior behavior.
+    print("Testing ψ for merge [(5, 7, 1)]:")
+    mapping = build_layer_mapping(32, [(5, 7, 1)])
     assert mapping[0] == 0
     assert mapping[4] == 4
     assert mapping[5] == 5
-    assert mapping[6] == 5  # merged into 5
-    assert mapping[7] == 5  # merged into 5
-    assert mapping[8] == 6  # shifted down by 2
+    assert mapping[6] == 5
+    assert mapping[7] == 5
+    assert mapping[8] == 6
     assert mapping[31] == 29
-    print("✓ All mapping assertions passed")
+    print("  ok")
+
+    # Overlapping ops: second op must degenerate to a no-op (paper §3.1).
+    print("Testing ψ for overlapping [(5, 7, 1), (6, 7, 1)]:")
+    psi, eff = _replay_psi([(5, 7, 1), (6, 7, 1)], 32)
+    assert eff == [(5, 7)], f"expected one effective merge, got {eff}"
+    assert psi[6] == 5 and psi[7] == 5
+    assert psi[8] == 6
+    print("  ok")
+
+    # Disjoint ops: both apply, ψ composes correctly.
+    print("Testing ψ for disjoint [(5, 7, 1), (10, 12, 1)]:")
+    psi, eff = _replay_psi([(5, 7, 1), (10, 12, 1)], 32)
+    assert len(eff) == 2
+    assert eff[0] == (5, 7)
+    assert eff[1] == (10 - 2, 12 - 2)  # second op mapped through first
+    assert psi[12] == 8
+    assert psi[13] == 9
+    print("  ok")
+
+    # Inactive flag: no ops applied.
+    print("Testing ψ with all a=0:")
+    psi, eff = _replay_psi([(5, 7, 0)], 32)
+    assert eff == []
+    assert psi == list(range(32))
+    print("  ok")
+
+    print("All ψ assertions passed.")
