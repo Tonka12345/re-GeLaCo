@@ -81,28 +81,14 @@ cd ~
 export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
 
-git clone http://gitlab.zemris.fer.hr/yeti/ecf.git
-# If that URL is blocked, fallback to the GitHub mirror:
-#   git clone https://github.com/Yeti-or/ecf.git
-cd ecf
-
-# Some ECF distributions ship a CMakeLists.txt; some only an old autotools
-# build. Try cmake first:
-mkdir -p build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ecf-install -DCMAKE_BUILD_TYPE=Release \
-    2>&1 | tee cmake.log
-```
-
-If `cmake` succeeds, continue with:
-
-```bash
-make -j8 2>&1 | tee make.log
-make install 2>&1 | tee install.log
-```
-
-If `cmake` reports "no CMakeLists.txt", **stop and send me the directory
-listing** of `~/ecf` (`ls ~/ecf`) and I will give you the autotools or
-Makefile-based fallback steps.
+mkdir tmp
+mkdir ecf-install
+cd ./tmp
+git clone https://github.com/djakobovic/ECF.git
+cd ECF
+mkdir build && cd build
+cmake .. -DCMAKE_CXX_FLAGS="-fpermissive"
+cmake --build . --config Release
 
 ### 2.2 Export environment variables
 
@@ -113,6 +99,11 @@ echo 'export ECF_ROOT=$HOME/ecf-install' >> ~/.bashrc
 echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
 source ~/.bashrc
 ```
+
+### 2.3
+
+cp ./libECF.a $ECF_ROOT/lib/
+cp -r ../ECF $ECF_ROOT/include/
 
 ### 2.3 Verify the install layout
 
