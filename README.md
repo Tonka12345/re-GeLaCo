@@ -1,7 +1,8 @@
 # GeLaCo — Bi-objective Evolutionary Layer Collapse for LLM Compression
 
 A reproduction of the **GeLaCo** method from
-[arXiv:2507.10059](https://arxiv.org/abs/2507.10059), targeting **Llama-2-7B**.
+[arXiv:2507.10059](https://arxiv.org/abs/2507.10059), targeting **Llama-2-7B**
+on the **Supek** HPC cluster.
 
 GeLaCo compresses a pre-trained LLM by **collapsing groups of consecutive
 transformer blocks** into one. Which groups to collapse — and how many — is
@@ -10,16 +11,11 @@ trades **module-wise output similarity** (preserved quality) against
 **compression ratio** (layers removed). The result is a Pareto front of
 compressed checkpoints rather than a single point.
 
-This repository contains two execution modes:
-
-| Mode | Entry point | Purpose |
-|---|---|---|
-| **Prototype** (single eval) | [evaluate.py](evaluate.py) | One pass over a hard-coded merge; sanity-checks the merge math, the fitness function, and the model-load pipeline. |
-| **Full search** (30k evals) | [server.py](server.py) + [ecf/gelaco_ecf](ecf/) | NSGA-II in C++ (ECF) driving a persistent Python evaluator over named FIFOs; produces a Pareto archive. |
-
-For the **step-by-step deployment runbook on the Supek cluster with checkpoints**,
-see [README_EVOLUTION.md](README_EVOLUTION.md). The present file documents the
-code itself.
+This repository contains the full evolutionary search:
+[server.py](server.py) loads Llama-2-7B once and services fitness requests
+over named FIFOs from a C++ NSGA-II driver in [ecf/](ecf/). A separate
+single-evaluation prototype lives on the `evaluation-testing` branch — see
+its `README.md` for that workflow.
 
 ---
 
@@ -29,13 +25,12 @@ code itself.
 2. [Architecture](#2-architecture)
 3. [Repository layout](#3-repository-layout)
 4. [Configuration & parameters](#4-configuration--parameters)
-5. [Setup](#5-setup)
-6. [Running the prototype (single evaluation)](#6-running-the-prototype-single-evaluation)
-7. [Running the full evolutionary search](#7-running-the-full-evolutionary-search)
-8. [Output artifacts](#8-output-artifacts)
-9. [Deviations from the paper](#9-deviations-from-the-paper)
-10. [Memory and runtime budgets](#10-memory-and-runtime-budgets)
-11. [Troubleshooting](#11-troubleshooting)
+5. [One-time cluster setup](#5-one-time-cluster-setup)
+6. [Running the full evolutionary search](#6-running-the-full-evolutionary-search)
+7. [Output artifacts](#7-output-artifacts)
+8. [Deviations from the paper](#8-deviations-from-the-paper)
+9. [Memory and runtime budgets](#9-memory-and-runtime-budgets)
+10. [Troubleshooting](#10-troubleshooting)
 
 ---
 
@@ -73,7 +68,7 @@ to remap `(b_i, e_i)` through the current compressed indexing each time.
 
 That mapping is **ψ**: an array of length `L` initialized to the identity,
 updated after every effective merge so that
-`ψ[original_idx] → compressed_idx`. The paper's algorithm is:
+`ψ[original_idx] → compressed_idx`. The paper's algorithm:
 
 ```python
 psi = [0, 1, ..., L-1]                     # identity
@@ -122,8 +117,7 @@ The individual's overall **similarity** objective is the mean fitness over all
 `(L − L′) / L`, where `L′` is the compressed layer count.
 
 Both objectives are in `[0, 1]` and both are **maximized**. See
-[fitness.py](fitness.py): `compute_fitness`, `compute_attention_similarity`,
-`compute_ffn_similarity`, `compute_hidden_state_similarity`.
+[fitness.py](fitness.py): `compute_fitness`.
 
 ### 1.4 NSGA-II search (paper §4)
 
@@ -133,7 +127,7 @@ The C++ ECF driver runs **NSGA-II** on the 96-D real-valued genotype:
 - **Termination**: 30,000 fitness evaluations
 - **Crossover**: integer-adapted SBX, probability 1.0, η_c = 20
 - **Mutation**: one random gene per individual replaced uniformly within
-  bounds — see §9 for the deviation from the paper's polynomial mutation.
+  bounds — see §8 for the deviation from the paper's polynomial mutation.
 - **Selection**: NSGA-II's standard non-dominated sorting + crowding distance.
 
 ECF's `MOFitnessMin` is used with negated objectives (similarity and
@@ -158,7 +152,7 @@ the identity individual, which is short-circuited without IPC at fitness
 
 ## 2. Architecture
 
-The full search runs **two co-resident processes on a single GPU node**
+The search runs **two co-resident processes on a single GPU node**
 connected over two **named FIFOs** in `/tmp`:
 
 ```
@@ -234,16 +228,13 @@ the search is **never aborted** by a single bad individual.
 
 ```
 re-GeLaCo/
-├── README.md                  # this file (architecture, code, params)
-├── README_EVOLUTION.md        # cluster-deployment runbook with checkpoints
+├── README.md                  # this file
 ├── requirements.txt           # Python deps
 │
 ├── config.py                  # All constants and FIFO/READY env-var paths
 ├── data_loader.py             # 64 Wikipedia calibration sentences (seeded)
 ├── layer_merge.py             # Differential merge + iterative ψ mapping
 ├── fitness.py                 # Hook-based module-wise similarity fitness
-│
-├── evaluate.py                # Prototype entry: one merge → one fitness
 ├── server.py                  # Persistent evaluator (FIFO loop)
 │
 ├── ecf/                       # ECF C++ NSGA-II driver
@@ -253,7 +244,6 @@ re-GeLaCo/
 │   ├── Makefile               # links against $ECF_ROOT
 │   └── parameters.txt         # NSGA-II hyperparameters (ECF XML)
 │
-├── run_prototype.pbs          # PBS job: single evaluation
 └── run_evolution.pbs          # PBS job: spawn server + ECF + cleanup
 ```
 
@@ -264,8 +254,7 @@ re-GeLaCo/
 | [config.py](config.py) | Module-level constants: `MODEL_NAME`, `NUM_ORIGINAL_LAYERS`, `NUM_CALIBRATION_SENTENCES`, `MAX_SENTENCE_LENGTH`, `RANDOM_SEED`, `FIFO_REQ_PATH`, `FIFO_RSP_PATH`, `READY_FILE`. | FIFO paths read from env (`GELACO_REQ_FIFO`, …) with sensible defaults for interactive testing. |
 | [data_loader.py](data_loader.py) | `load_calibration_sentences()` → `list[str]` | Streams Wikipedia, dedupes, picks 64 sentences with `RANDOM_SEED=42` for reproducibility. Uses a hard-exit workaround on shutdown to avoid PyArrow background-thread segfaults. |
 | [layer_merge.py](layer_merge.py) | `apply_differential_merge`, `remove_collapsed_layers`, `apply_merge_operations`, `canonical_effective_ops`, `_replay_psi` | The paper's ψ logic lives here. The `__main__` block runs four assertions including the overlapping-genotype case. |
-| [fitness.py](fitness.py) | `compute_fitness(..., verbose=True)` | `verbose=False` silences the 64-line-per-eval log spam — the server passes `False`, the prototype passes `True`. |
-| [evaluate.py](evaluate.py) | `main()` | One-shot: load model, deepcopy, apply `config.MERGE_OPERATIONS`, compute fitness, print. |
+| [fitness.py](fitness.py) | `compute_fitness(..., verbose=True)` | The server passes `verbose=False` to silence the 64-line-per-eval log spam. |
 | [server.py](server.py) | `main()` | Persistent loop: read JSON triples from req FIFO, evaluate, write `OK sim comp` to rsp FIFO. NaN sanitization, VRAM cleanup, `QUIT` shutdown, hard-exit on finalize. |
 
 ### What each C++ file does
@@ -295,7 +284,6 @@ There are three places parameters live, depending on which side owns them.
 | `MAX_SENTENCE_LENGTH` | `128` | Token cap; longer sentences are truncated. |
 | `RANDOM_SEED` | `42` | Used by both the dataset sampler and the ECF randomizer (`parameters.txt:randomizer.seed`). |
 | `DEVICE` | `"cuda"` | `"cpu"` works for unit tests but not real evaluations. |
-| `MERGE_OPERATIONS` | `[(5, 7, 1)]` | Only consumed by `evaluate.py` — the genotype for the single-eval prototype. Ignored by `server.py`. |
 | `FIFO_REQ_PATH` / `FIFO_RSP_PATH` / `READY_FILE` | `/tmp/gelaco_{req,rsp,ready}` (overridable via env) | Per-job paths are injected by `run_evolution.pbs` (`/tmp/gelaco_*.$PBS_JOBID`) so concurrent jobs on the same node don't collide. |
 
 ### 4.2 ECF-side ([ecf/parameters.txt](ecf/parameters.txt))
@@ -361,158 +349,196 @@ random initial population.
 
 The script (i) `mkfifo`s the two FIFOs, (ii) starts `server.py` in the
 background, (iii) polls for `GELACO_READY_FILE` (up to 15 min), (iv) execs
-`./ecf/gelaco_ecf ecf/parameters.txt` in the foreground, (v) on exit/EXIT/INT/TERM
-writes `QUIT` to the req FIFO and waits up to 30 s before SIGTERM/SIGKILL,
-then `rm`s the FIFOs.
+`./ecf/gelaco_ecf ecf/parameters.txt` in the foreground, (v) on
+exit/EXIT/INT/TERM writes `QUIT` to the req FIFO and waits up to 30 s before
+SIGTERM/SIGKILL, then `rm`s the FIFOs.
 
 ---
 
-## 5. Setup
+## 5. One-time cluster setup
 
-> Cluster-specific commands are in [README_EVOLUTION.md](README_EVOLUTION.md).
-> The block below is the minimal local checklist.
+Everything below is **idempotent** — re-running it is harmless. Run it once,
+then jump to §6 for normal day-to-day usage.
 
-### 5.1 SSH and proxy (Supek)
+### 5.1 SSH and shell setup
 
 ```bash
-ssh tsegvic@login-gpu.hpc.srce.hr
-echo 'export http_proxy="http://10.150.1.1:3128"'  >> ~/.bashrc
-echo 'export https_proxy="http://10.150.1.1:3128"' >> ~/.bashrc
+ssh tsegvic@login-gpu.hpc.srce.hr        # replace tsegvic with your username
 ```
 
-### 5.2 HuggingFace token
-
-Llama-2 is gated. Accept the license at
-<https://huggingface.co/meta-llama/Llama-2-7b-hf>, then:
+Supek worker nodes have no internet except via the squid proxy, and Llama-2 is
+a gated HuggingFace model. Append these three exports to your `~/.bashrc`:
 
 ```bash
-echo 'export HF_TOKEN="hf_..."' >> ~/.bashrc
+cat >> ~/.bashrc <<'EOF'
+export http_proxy="http://10.150.1.1:3128"
+export https_proxy="http://10.150.1.1:3128"
+export HF_TOKEN="hf_REPLACE_ME_WITH_REAL_TOKEN"
+EOF
 source ~/.bashrc
 ```
 
-### 5.3 Python environment
+Accept the Llama-2 license at
+<https://huggingface.co/meta-llama/Llama-2-7b-hf> before the first run, or
+the HF download will 403.
+
+### 5.2 Clone the repository
+
+```bash
+cd ~
+git clone https://github.com/Tonka12345/re-GeLaCo.git
+cd re-GeLaCo
+git checkout main
+```
+
+### 5.3 Python virtual environment
 
 ```bash
 module load cray-python/3.11.7
-cd ~/re-GeLaCo
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
-### 5.4 Build ECF (only needed for the full search)
+### 5.4 Build and install ECF from source
+
+ECF (Evolutionary Computation Framework) is not pre-installed on Supek. Build
+it once into `$HOME/ecf-install/` on the login node:
 
 ```bash
 cd ~
-git clone http://gitlab.zemris.fer.hr/yeti/ecf.git    # or a known mirror
-cd ecf && mkdir build && cd build
+git clone http://gitlab.zemris.fer.hr/yeti/ecf.git
+cd ecf
+mkdir -p build && cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ecf-install -DCMAKE_BUILD_TYPE=Release
-make -j8 && make install
+make -j8
+make install
+```
 
-echo 'export ECF_ROOT=$HOME/ecf-install' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+Verify the install:
+
+```bash
+ls $HOME/ecf-install/include/ECF/    # expect AlgNSGA2.h, FloatingPoint/, ...
+ls $HOME/ecf-install/lib/            # expect libECF.a
+```
+
+Export the ECF paths permanently:
+
+```bash
+cat >> ~/.bashrc <<'EOF'
+export ECF_ROOT=$HOME/ecf-install
+export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH
+EOF
 source ~/.bashrc
-
-cd ~/re-GeLaCo/ecf && make        # produces ./gelaco_ecf
 ```
 
----
-
-## 6. Running the prototype (single evaluation)
-
-The prototype hard-codes `MERGE_OPERATIONS = [(5, 7, 1)]` in
-[config.py](config.py) and runs **one** fitness evaluation. Use it to sanity-check
-the merge math, the calibration sentences, and the GPU pipeline.
-
-### Interactive
+### 5.5 Build the GeLaCo C++ driver
 
 ```bash
-qsub -I -q gpu -l select=1:ncpus=8:ngpus=1:mem=64GB -l walltime=02:00:00
-# in the interactive session:
-export http_proxy="http://10.150.1.1:3128"
-export https_proxy="http://10.150.1.1:3128"
-export HF_TOKEN="hf_..."
+cd ~/re-GeLaCo/ecf
+make
+ls -la gelaco_ecf      # ~few hundred KB executable should appear
+```
+
+### 5.6 Sanity-check the Python side
+
+The ψ-mapping unit test runs in ~1 s on the login node (no GPU needed) and
+verifies the four cases from §1.2 (single merge, overlapping merges, disjoint
+merges, all-inactive):
+
+```bash
 cd ~/re-GeLaCo
-module load cray-python/3.11.7
 source venv/bin/activate
-python evaluate.py
+python layer_merge.py
 ```
 
-### Batch
-
-```bash
-cd ~/re-GeLaCo
-qsub run_prototype.pbs
-qstat -u $USER
-cat gelaco-proto.o*
-```
-
-### Expected output
-
-```
-============================================================
-  GeLaCo Prototype — Single Evaluation
-============================================================
-Model:            meta-llama/Llama-2-7b-hf
-Merge operations: [(5, 7, 1)]
-...
-[Fitness] === FINAL RESULTS ===
-  Attention similarity:    0.XXXXXX
-  FFN similarity:          0.XXXXXX
-  Hidden state similarity: 0.XXXXXX
-  Overall fitness:         0.XXXXXX
-```
+You should see four `ok` lines and `All ψ assertions passed.`. If any assertion
+fails, do not proceed — the search will produce incoherent results.
 
 ---
 
-## 7. Running the full evolutionary search
+## 6. Running the full evolutionary search
 
-See [README_EVOLUTION.md](README_EVOLUTION.md) for the step-by-step deployment
-runbook with checkpoints. The short version:
+Once §5 is done, normal usage is one `qsub` command.
+
+### 6.1 Submit the job
 
 ```bash
 cd ~/re-GeLaCo
 qsub run_evolution.pbs
-qstat -u $USER
-tail -f server.log gelaco-evo.o*
+qstat -u $USER         # watch state Q → R → C
 ```
 
-The job:
-1. mkfifo's `/tmp/gelaco_{req,rsp}.$PBS_JOBID`.
-2. Launches `server.py`, which loads Llama-2-7B (~60 s) and writes
+The PBS script handles the entire lifecycle:
+
+1. Creates per-job FIFOs at `/tmp/gelaco_{req,rsp}.$PBS_JOBID`.
+2. Launches [server.py](server.py) in the background; it loads Llama-2-7B
+   (~60–120 s) and 64 calibration sentences, then writes
    `GELACO_READY_FILE`.
-3. Polls READY, then launches `./ecf/gelaco_ecf ecf/parameters.txt`.
-4. ECF runs NSGA-II, sending `[[b,e,a],...]` requests through the req FIFO
-   and reading `OK sim comp` responses from the rsp FIFO.
-5. On termination (30,000 evals) or any signal: writes `QUIT` to req,
-   waits ≤30 s, then cleans up.
+3. Polls READY (up to 15 min) and aborts with the server's last 80 log lines
+   if the server dies first.
+4. Launches `./ecf/gelaco_ecf ecf/parameters.txt` in the foreground. ECF runs
+   NSGA-II, sending each candidate's 32 (b, e, a) triples through the req FIFO
+   and reading `OK sim comp` back from the rsp FIFO.
+5. On termination (30,000 evaluations reached, or any signal), the cleanup
+   trap writes `QUIT` to the req FIFO, waits up to 30 s, then escalates to
+   SIGTERM and SIGKILL if needed, and removes the FIFOs.
 
-### Smoke test before the full run
+### 6.2 Monitor progress
 
-To validate the IPC + cache + parameters before committing to 72 h:
+While running:
 
 ```bash
+tail -f ~/re-GeLaCo/server.log              # one line per evaluation
+tail -f ~/re-GeLaCo/gelaco-evo.o*           # combined PBS stdout/stderr
+tail -f ~/re-GeLaCo/ecf.log                 # ECF NSGA-II per-generation stats
+```
+
+Healthy signs:
+- `server.log` produces `[server …] eval #N ops=… sim=… comp=… (Xs, alloc=…GB)`
+  lines steadily.
+- `gelaco-evo.o*` shows `[GeLaCo] eval=N hits=K hitRate=…%` lines every 50
+  evals. `hitRate` typically grows from ~0% in the first few generations to
+  20–60% as the population converges.
+- `milestone.txt` (and rotated snapshots) appear roughly every 500 evals.
+
+### 6.3 (Optional) smoke test before the 72 h run
+
+If you've changed any code that could affect the IPC, the ψ logic, or the
+ECF parameter parsing, run a short variant first. Make overrides for
+population size and termination, plus a shorter PBS walltime:
+
+```bash
+cd ~/re-GeLaCo
 cp ecf/parameters.txt ecf/parameters.smoke.txt
-sed -i 's|<Entry key="population.size">200</Entry>|<Entry key="population.size">8</Entry>|' ecf/parameters.smoke.txt
+sed -i 's|<Entry key="population.size">200</Entry>|<Entry key="population.size">8</Entry>|'  ecf/parameters.smoke.txt
 sed -i 's|<Entry key="term.eval">30000</Entry>|<Entry key="term.eval">20</Entry>|'           ecf/parameters.smoke.txt
 
 cp run_evolution.pbs run_evolution.smoke.pbs
-sed -i 's|walltime=72:00:00|walltime=01:00:00|'                   run_evolution.smoke.pbs
-sed -i 's|gelaco-evo|gelaco-smoke|'                               run_evolution.smoke.pbs
-sed -i 's|ecf/parameters.txt|ecf/parameters.smoke.txt|'           run_evolution.smoke.pbs
+sed -i 's|walltime=72:00:00|walltime=01:00:00|'                run_evolution.smoke.pbs
+sed -i 's|gelaco-evo|gelaco-smoke|'                            run_evolution.smoke.pbs
+sed -i 's|ecf/parameters.txt|ecf/parameters.smoke.txt|'        run_evolution.smoke.pbs
 
 qsub run_evolution.smoke.pbs
 ```
 
-Expect ~20 evaluations completing in a few minutes, real `sim` numbers in
-`[0, 1]`, and a non-zero cache hit rate.
+A successful smoke run completes in a few minutes, produces ~20 well-formed
+`OK sim comp` lines with at least one cache hit, and emits zero
+`Warning: key ... not registered` lines in `ecf.log`.
+
+### 6.4 Reading the result
+
+The deliverable is the **final Pareto archive** in `milestone.txt`. ECF uses
+`MOFitnessMin` with negated objectives, so the two values stored per
+individual are `(-similarity, -compression)`. Flip both signs to recover the
+paper's Fig. 3 orientation: similarity on the y-axis, compression on the x-axis.
 
 ---
 
-## 8. Output artifacts
+## 7. Output artifacts
 
-After a full run:
+After a full run, the working directory contains:
 
 | Path | Producer | Contents |
 |---|---|---|
@@ -523,13 +549,13 @@ After a full run:
 | stderr of ECF | C++ driver | `[GeLaCo] eval=N hits=K hitRate=…% last=(sim=…, comp=…)` every 50 evals. A healthy run grows `hitRate` from ~0% early to ~20–60% late as the population converges. |
 
 **Post-processing into a Pareto plot:** parse `milestone.txt`, extract the
-final generation's individuals' two objectives, negate them, plot `comp` on x
-and `sim` on y. Expected shape: monotone-decreasing similarity as compression
-grows (paper Fig. 3).
+final generation's individuals' two objectives, negate them, plot `compression`
+on x and `similarity` on y. Expected shape: monotone-decreasing similarity as
+compression grows (paper Fig. 3).
 
 ---
 
-## 9. Deviations from the paper
+## 8. Deviations from the paper
 
 Honest accounting of where ECF 1.6.1's available operator set forced us to
 deviate from paper §4. None of these affect the bi-objective NSGA-II logic
@@ -546,7 +572,7 @@ These deviations are documented in the head comment of
 
 ---
 
-## 10. Memory and runtime budgets
+## 9. Memory and runtime budgets
 
 ### Memory (A100 40 GB)
 
@@ -557,9 +583,9 @@ These deviations are documented in the head comment of
 | Activations + hooks during fwd pass | ~4–6 GB |
 | **Peak** | **~28–32 GB** |
 
-`server.py` `del`s the compressed copy and calls `torch.cuda.empty_cache()` +
-`gc.collect()` between evaluations, so steady-state usage drops back to ~14 GB
-between requests.
+[server.py](server.py) `del`s the compressed copy and calls
+`torch.cuda.empty_cache()` + `gc.collect()` between evaluations, so
+steady-state usage drops back to ~14 GB between requests.
 
 ### Runtime
 
@@ -576,18 +602,19 @@ and for low cache-hit phases early in the search.
 
 ---
 
-## 11. Troubleshooting
+## 10. Troubleshooting
 
-### "Server hangs at `opening req FIFO ... (blocking)`"
+### Server hangs at `opening req FIFO ... (blocking)`
 Expected. Named-FIFO `open()` blocks until the peer connects. The PBS script
-ensures ECF starts after `GELACO_READY_FILE` is written. When testing manually
-outside PBS, use the background-write pattern: `( echo '[[5,7,1]]' > "$REQ" ) &`.
+ensures ECF starts only after `GELACO_READY_FILE` is written. When testing
+manually outside PBS, use the background-write pattern:
+`( echo '[[5,7,1]]' > "$REQ" ) &` before reading the response.
 
 ### Server returns `sim=nan`
 Over-aggressive merges (e.g. 30/32 layers collapsed) produce numerically
-unstable logits and NaN similarities. `server.py` clamps NaN/Inf to `sim=-1.0`
-and tags the log line `[NaN→-1.0]`. NSGA-II then dominates these individuals
-out without poisoning the front.
+unstable logits and NaN similarities. [server.py](server.py) clamps NaN/Inf
+to `sim=-1.0` and tags the log line `[NaN→-1.0]`. NSGA-II then dominates these
+individuals out without poisoning the front.
 
 ### `Warning: key … not registered` in `ecf.log`
 The parameter key is not registered in your ECF version. Check the actual
@@ -613,3 +640,18 @@ ECF's per-generation stats reports a single scalar (rank-like) for
 multi-objective individuals — the real two objectives live in `milestone.txt`.
 A `stdev=0` here doesn't mean the search has collapsed; check the milestone
 files instead.
+
+### Server dies before READY
+Most often: missing `HF_TOKEN` in the worker shell, expired/invalid token, or
+the Llama-2 license hasn't been accepted yet. The PBS script's "ERROR: server
+died before becoming ready" path dumps the last 80 lines of `server.log` —
+read those first.
+
+---
+
+## Single-evaluation prototype
+
+A one-shot prototype that applies a hard-coded merge and prints one fitness
+value lives on the `evaluation-testing` branch. See the `README.md` there for
+that workflow. It's useful for sanity-checking the merge math and the
+fitness function without spinning up the full NSGA-II pipeline.
