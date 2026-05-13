@@ -253,9 +253,9 @@ about to submit a SHORT batch job.
 ```bash
 cd ~/re-GeLaCo
 cp ecf/parameters.txt ecf/parameters.smoke.txt
-# Override popSize and termination for a quick run:
-sed -i 's|<Entry key="popSize">200</Entry>|<Entry key="popSize">8</Entry>|'    ecf/parameters.smoke.txt
-sed -i 's|<Entry key="term.maxEvaluations">30000</Entry>|<Entry key="term.maxEvaluations">20</Entry>|' ecf/parameters.smoke.txt
+# Override population.size and termination for a quick run:
+sed -i 's|<Entry key="population.size">200</Entry>|<Entry key="population.size">8</Entry>|'    ecf/parameters.smoke.txt
+sed -i 's|<Entry key="term.eval">30000</Entry>|<Entry key="term.eval">20</Entry>|' ecf/parameters.smoke.txt
 ```
 
 ### 5.2 Make a smoke PBS script

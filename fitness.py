@@ -219,6 +219,7 @@ def compute_fitness(
     sentences: list[str],
     num_original_layers: int,
     device: str = "cuda",
+    verbose: bool = True,
 ) -> dict:
     """
     Compute the GeLaCo module-wise similarity fitness.
@@ -251,10 +252,11 @@ def compute_fitness(
             "per_sentence": list of per-sentence dicts,
         }
     """
-    print(f"\n[Fitness] Computing module-wise similarity fitness")
-    print(f"[Fitness] Sentences: {len(sentences)}, "
-          f"Original layers: {num_original_layers}, "
-          f"Compressed layers: {len(compressed_model.model.layers)}")
+    if verbose:
+        print(f"\n[Fitness] Computing module-wise similarity fitness")
+        print(f"[Fitness] Sentences: {len(sentences)}, "
+              f"Original layers: {num_original_layers}, "
+              f"Compressed layers: {len(compressed_model.model.layers)}")
 
     # Set up activation collectors
     orig_collector = ActivationCollector(original_model, "original")
@@ -327,10 +329,11 @@ def compute_fitness(
             }
             per_sentence_results.append(sent_result)
 
-            preview = sentence[:60] + "..." if len(sentence) > 60 else sentence
-            print(f"  [Sentence {sent_idx}] attn={attn_sim:.4f} "
-                  f"ffn={ffn_sim:.4f} hs={hs_sim:.4f} "
-                  f"fitness={sentence_fitness:.4f} | {preview}")
+            if verbose:
+                preview = sentence[:60] + "..." if len(sentence) > 60 else sentence
+                print(f"  [Sentence {sent_idx}] attn={attn_sim:.4f} "
+                      f"ffn={ffn_sim:.4f} hs={hs_sim:.4f} "
+                      f"fitness={sentence_fitness:.4f} | {preview}")
 
     # Clean up hooks
     orig_collector.clear()
@@ -350,10 +353,11 @@ def compute_fitness(
         "per_sentence": per_sentence_results,
     }
 
-    print(f"\n[Fitness] === FINAL RESULTS ===")
-    print(f"[Fitness]   Attention similarity:    {avg_attn:.6f}")
-    print(f"[Fitness]   FFN similarity:          {avg_ffn:.6f}")
-    print(f"[Fitness]   Hidden state similarity: {avg_hs:.6f}")
-    print(f"[Fitness]   Overall fitness:         {avg_fitness:.6f}")
+    if verbose:
+        print(f"\n[Fitness] === FINAL RESULTS ===")
+        print(f"[Fitness]   Attention similarity:    {avg_attn:.6f}")
+        print(f"[Fitness]   FFN similarity:          {avg_ffn:.6f}")
+        print(f"[Fitness]   Hidden state similarity: {avg_hs:.6f}")
+        print(f"[Fitness]   Overall fitness:         {avg_fitness:.6f}")
 
     return results

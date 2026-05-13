@@ -1,31 +1,40 @@
 <ECF>
 
     <!--
-      GeLaCo bi-objective configuration — exactly the hyperparameters
-      reported in arXiv:2507.10059 §4 ("Operational Framework"):
+      GeLaCo bi-objective configuration for ECF 1.6.1.
 
+      Paper (arXiv:2507.10059 §4) target:
         Algorithm        : NSGA-II
         Population       : 200 individuals
         Termination      : 30,000 fitness evaluations
         Crossover        : integer-adapted SBX, p=0.9, eta_c=20.0
         Mutation         : polynomial, p=1/(3L)=1/96, eta_m=20
-        Encoding         : 3L = 96 variables; b, e in [0, L-1], a in {0,1}
-                           (the {0,1} projection is handled in the C++ decoder;
-                           ECF FloatingPoint uses scalar bounds [0, L-1])
+        Encoding         : 3L = 96 vars; b,e in [0, L-1], a in {0,1}
+                           (the {0,1} projection is handled in the C++ decoder)
         Calibration      : 64 Wikipedia sentences (handled by server.py)
 
-      The Python evaluator (server.py) is started by the PBS job script and
-      connected over two named FIFOs (env vars GELACO_REQ_FIFO,
+      Deviations forced by the operator set in ECF 1.6.1:
+        * SBX probability set to 1.0 (no other crossover registered; the
+          framework requires per-genotype crossover probs sum to 1.0).
+        * SBX distribution index registered as `crx.sbx.ni` (UINT) in the
+          global Registry, not as a genotype entry, and defaults to 1; we
+          set it to 20 to match the paper.
+        * Polynomial mutation is not implemented in this ECF; the only
+          FloatingPoint mutation operator is `mut.simple`, which uniformly
+          replaces ONE random gene per call. We set per-individual mutation
+          probability (`mutation.indprob`) to 1.0 so every individual gets
+          one gene replaced — same expected count of mutated genes as the
+          paper's polynomial mutation at p=1/96 per gene (96 * 1/96 = 1),
+          but with uniform replacement instead of small local perturbation.
+
+      The Python evaluator (server.py) is started by the PBS job script
+      and connected over two named FIFOs (env vars GELACO_REQ_FIFO,
       GELACO_RSP_FIFO, GELACO_READY_FILE).
     -->
 
     <Algorithm>
-        <NSGA2>
-            <Entry key="popSize">200</Entry>
-            <!-- Crossover and mutation probabilities controlled at the
-                 genotype level below (NSGA-II calls into the genotype's
-                 registered operators). -->
-        </NSGA2>
+        <!-- NSGA-II takes no registered parameters in ECF 1.6.1. -->
+        <NSGA2/>
     </Algorithm>
 
     <Genotype>
@@ -34,16 +43,14 @@
             <Entry key="lbound">0.0</Entry>
             <Entry key="ubound">31.0</Entry>
 
-            <!-- SBX crossover, integer-adapted via floor() in the decoder.
-                 Paper §4: probability 0.9, distribution index 20.0. -->
-            <Entry key="crx.sbx">0.9</Entry>
-            <Entry key="crx.sbx.eta">20.0</Entry>
+            <!-- Crossover: only SBX registered. Must sum to 1.0 across all
+                 crossover ops for this genotype. -->
+            <Entry key="crx.sbx">1.0</Entry>
 
-            <!-- Polynomial mutation. Paper §4: p = 1/(3L) = 1/96, eta = 20. -->
-            <Entry key="mut.polynomial">0.010416667</Entry>
-            <Entry key="mut.polynomial.eta">20.0</Entry>
-            <!-- Disable other default mutation operators to match the paper. -->
-            <Entry key="mut.simple">0.0</Entry>
+            <!-- Mutation: only mut.simple registered. Weight is normalized
+                 across mutation ops for this genotype; setting to 1.0
+                 silences ECF's "cumulative != 1" warning. -->
+            <Entry key="mut.simple">1.0</Entry>
         </FloatingPoint>
     </Genotype>
 
@@ -51,13 +58,25 @@
         <!-- Reproducibility: match the Python data_loader seed. -->
         <Entry key="randomizer.seed">42</Entry>
 
+        <!-- Population size (paper §4). -->
+        <Entry key="population.size">200</Entry>
+
         <!-- Termination on number of evaluations (paper's criterion). -->
-        <Entry key="term.maxEvaluations">30000</Entry>
+        <Entry key="term.eval">30000</Entry>
+
+        <!-- SBX distribution index eta_c (paper §4 = 20). -->
+        <Entry key="crx.sbx.ni">20</Entry>
+
+        <!-- Per-individual mutation probability. With one gene replaced
+             per mutated individual, this is the per-individual mutation
+             rate. Set to 1.0 to match the paper's expected count
+             (1 mutated gene per individual). -->
+        <Entry key="mutation.indprob">1.0</Entry>
 
         <!-- Single run; bump if you want multiple independent seeds. -->
         <Entry key="batch.repeats">1</Entry>
 
-        <!-- Logging: write the run to ecf.log and a Pareto archive. -->
+        <!-- Logging. -->
         <Entry key="log.level">3</Entry>
         <Entry key="log.filename">ecf.log</Entry>
         <Entry key="log.frequency">1</Entry>

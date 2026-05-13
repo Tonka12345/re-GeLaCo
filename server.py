@@ -28,6 +28,7 @@ VRAM strategy:
 import copy
 import gc
 import json
+import math
 import os
 import sys
 import time
@@ -107,10 +108,19 @@ def evaluate_one(
             sentences=sentences,
             num_original_layers=NUM_ORIGINAL_LAYERS,
             device=DEVICE,
+            verbose=False,
         )
         removed = NUM_ORIGINAL_LAYERS - len(compressed.model.layers)
         compression = removed / NUM_ORIGINAL_LAYERS
-        return float(res["fitness"]), float(compression)
+        sim = float(res["fitness"])
+        # Over-aggressive compression (e.g. 30/32 layers removed) makes
+        # the surviving stack numerically unstable → logits become NaN/Inf
+        # and every similarity reduces to NaN. Map those to a worst-case
+        # similarity so NSGA-II dominates them out cleanly instead of
+        # poisoning the front (NaN compares are undefined behavior).
+        if not math.isfinite(sim):
+            sim = -1.0
+        return sim, float(compression)
     finally:
         del compressed
         if torch.cuda.is_available():
@@ -189,8 +199,9 @@ def main():
             try:
                 sim, comp = evaluate_one(original_model, tokenizer, sentences, ops)
                 dt = time.time() - t0
-                _log(f"eval #{n_served} ops={ops} sim={sim:.6f} comp={comp:.6f} "
-                     f"({dt:.1f}s, {_gpu_mem()})")
+                tag = " [NaN→-1.0]" if sim == -1.0 else ""
+                _log(f"eval #{n_served} ops={ops} sim={sim:.6f} comp={comp:.6f}"
+                     f"{tag} ({dt:.1f}s, {_gpu_mem()})")
                 rsp.write(f"OK {sim:.6f} {comp:.6f}\n")
             except Exception as e:
                 tb = traceback.format_exc().replace("\n", " | ")
