@@ -82,7 +82,8 @@ export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
 
 mkdir tmp
-mkdir ecf-install
+mkdir -p ecf-install/lib
+mkdir -p ecf-install/include
 cd ./tmp
 git clone https://github.com/djakobovic/ECF.git
 cd ECF
@@ -94,9 +95,8 @@ cmake --build . --config Release
 
 Add to `~/.bashrc` (one-time):
 
-```bash
-echo 'export ECF_ROOT=$HOME/ecf-install' >> ~/.bashrc
-echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+echo 'export ECF_ROOT=~/ecf-install' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib' >> ~/.bashrc
 source ~/.bashrc
 
 cp ./libECF.a $ECF_ROOT/lib/
@@ -107,7 +107,7 @@ cp -r ../ECF $ECF_ROOT/include/
 ### 2.3 Verify the install layout
 
 ```bash
-ls $ECF_ROOT/include/ECF/        # expect: ECF.h, FloatingPoint/, ...
+ls $ECF_ROOT/include/        # expect: ECF.h, FloatingPoint/, ...
 ls $ECF_ROOT/lib/                # expect: libecf.{a,so}
 ```
 
