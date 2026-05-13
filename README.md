@@ -1,153 +1,454 @@
-# GeLaCo Prototype — Single Evaluation
+# GeLaCo — Bi-objective Evolutionary Layer Collapse for LLM Compression
 
-A pure Python prototype that faithfully reproduces the **GeLaCo** layer-collapse
-method ([arXiv 2507.10059](https://arxiv.org/abs/2507.10059)) for a single
-evaluation on **Llama-2-7B**.
+A reproduction of the **GeLaCo** method from
+[arXiv:2507.10059](https://arxiv.org/abs/2507.10059), targeting **Llama-2-7B**.
 
-## What This Does
+GeLaCo compresses a pre-trained LLM by **collapsing groups of consecutive
+transformer blocks** into one. Which groups to collapse — and how many — is
+discovered automatically by a **bi-objective genetic algorithm (NSGA-II)** that
+trades **module-wise output similarity** (preserved quality) against
+**compression ratio** (layers removed). The result is a Pareto front of
+compressed checkpoints rather than a single point.
 
-1. Loads `meta-llama/Llama-2-7b-hf` (fp16)
-2. Creates a deep copy for the compressed model
-3. Applies one manual layer merge: layers 5→7 collapsed into layer 5
-4. Runs inference on Wikipedia calibration sentences
-5. Computes the GeLaCo module-wise similarity fitness:
-   - Attention similarity (q/k/v/o_proj activations)
-   - FFN similarity (gate/up/down_proj activations)
-   - Hidden state similarity (final hidden states)
-6. Prints the fitness score
+This repository contains two execution modes:
 
-## Project Structure
+| Mode | Entry point | Purpose |
+|---|---|---|
+| **Prototype** (single eval) | [evaluate.py](evaluate.py) | One pass over a hard-coded merge; sanity-checks the merge math, the fitness function, and the model-load pipeline. |
+| **Full search** (30k evals) | [server.py](server.py) + [ecf/gelaco_ecf](ecf/) | NSGA-II in C++ (ECF) driving a persistent Python evaluator over named FIFOs; produces a Pareto archive. |
 
-```
-re-GeLaCo/
-├── config.py           # Configuration constants
-├── data_loader.py      # Wikipedia sentence loading
-├── layer_merge.py      # Differential weight merging
-├── fitness.py          # Hook-based similarity fitness
-├── evaluate.py         # Main prototype script
-├── requirements.txt    # Python dependencies
-├── run_prototype.pbs   # PBS job script for Supek
-└── README.md           # This file
-```
+For the **step-by-step deployment runbook on the Supek cluster with checkpoints**,
+see [README_EVOLUTION.md](README_EVOLUTION.md). The present file documents the
+code itself.
 
 ---
 
-## Setup on Supek Cluster
+## Table of contents
 
-### 1. SSH into Supek
+1. [Algorithm overview](#1-algorithm-overview)
+2. [Architecture](#2-architecture)
+3. [Repository layout](#3-repository-layout)
+4. [Configuration & parameters](#4-configuration--parameters)
+5. [Setup](#5-setup)
+6. [Running the prototype (single evaluation)](#6-running-the-prototype-single-evaluation)
+7. [Running the full evolutionary search](#7-running-the-full-evolutionary-search)
+8. [Output artifacts](#8-output-artifacts)
+9. [Deviations from the paper](#9-deviations-from-the-paper)
+10. [Memory and runtime budgets](#10-memory-and-runtime-budgets)
+11. [Troubleshooting](#11-troubleshooting)
+
+---
+
+## 1. Algorithm overview
+
+### 1.1 Layer collapse via differential weight merging (paper §3.1)
+
+A *merge operation* `(b, e)` collapses the consecutive layer range `[b..e]` of
+the model into a single layer at index `b`, using the LaCo-style differential
+weight update applied to every parameter of the base layer:
+
+```
+θ*_b  =  θ_b  +  Σ_{k=1..(e-b)} (θ_{b+k} − θ_b)
+```
+
+The collapsed layers `[b+1..e]` are then removed from the `ModuleList`, and
+`config.num_hidden_layers` is updated. See
+[layer_merge.py](layer_merge.py): `apply_differential_merge`,
+`remove_collapsed_layers`.
+
+### 1.2 Genotype and ψ mapping (paper §3.1)
+
+For an `L`-layer model (L=32 for Llama-2-7B), each individual is a fixed-length
+genome of **`3L = 96` integers**, encoded as `L = 32` consecutive triples:
+
+```
+genome  =  [ (b_0, e_0, a_0), (b_1, e_1, a_1), ..., (b_{L-1}, e_{L-1}, a_{L-1}) ]
+            with  b_i, e_i ∈ [0, L-1]   and   a_i ∈ {0, 1}
+```
+
+Each active triple (`a_i = 1`, `e_i > b_i`) requests a merge of the original
+layers `[b_i..e_i]`. Because operations are applied **sequentially** to a
+*shrinking* model, the same triple cannot mean the same thing twice — we need
+to remap `(b_i, e_i)` through the current compressed indexing each time.
+
+That mapping is **ψ**: an array of length `L` initialized to the identity,
+updated after every effective merge so that
+`ψ[original_idx] → compressed_idx`. The paper's algorithm is:
+
+```python
+psi = [0, 1, ..., L-1]                     # identity
+for (b, e, a) in genotype_order:           # NOT sorted
+    if a != 1 or e <= b: continue
+    cb, ce = psi[b], psi[e]                # remap to current compressed indices
+    if ce <= cb: continue                  # collapsed by an earlier op → no-op
+    apply_differential_merge(model, cb, ce)
+    remove_collapsed_layers(model, cb, ce)
+    delta = ce - cb
+    for j in range(L):
+        if   b <= j <= e: psi[j] = cb       # all collapsed-origins point to cb
+        elif j > e:       psi[j] = max(0, psi[j] - delta)   # shift right side left
+```
+
+This is implemented in [layer_merge.py:`_replay_psi`](layer_merge.py) and
+[layer_merge.py:`apply_merge_operations`](layer_merge.py), and **mirrored
+bit-for-bit in C++** in [ecf/Evaluate.cpp:`canonicalize`](ecf/Evaluate.cpp) so
+that cache keys derived from the canonical effective-op list agree across the
+bridge.
+
+A common pitfall — using a static `cumulative_removed` offset instead of the
+dynamic per-op remap — is **incorrect for overlapping genotypes** and is
+explicitly tested against in [layer_merge.py](layer_merge.py)'s
+`__main__` block.
+
+### 1.3 Fitness: module-wise similarity (paper §3.2)
+
+For each of `N = 64` Wikipedia calibration sentences:
+
+1. Forward both the original and the compressed model.
+2. With **forward hooks**, collect activations on every `(layer, submodule)`
+   pair:
+   - **Attention**: `q_proj`, `k_proj`, `v_proj`, `o_proj`
+   - **FFN/MLP**: `gate_proj`, `up_proj`, `down_proj`
+   - **Hidden state**: the final hidden state of the model.
+3. For each original layer `j`, locate its image `ψ[j]` in the compressed
+   model and compute a flattened-cosine similarity between the two activations.
+4. Average over the four attention submodules → `attn_sim`; over the three
+   FFN submodules → `ffn_sim`; the final-layer hidden state similarity is
+   `hs_sim`.
+5. The sentence's fitness is `(attn_sim + ffn_sim + hs_sim) / 3`.
+
+The individual's overall **similarity** objective is the mean fitness over all
+64 sentences. The **compression** objective is the deterministic ratio
+`(L − L′) / L`, where `L′` is the compressed layer count.
+
+Both objectives are in `[0, 1]` and both are **maximized**. See
+[fitness.py](fitness.py): `compute_fitness`, `compute_attention_similarity`,
+`compute_ffn_similarity`, `compute_hidden_state_similarity`.
+
+### 1.4 NSGA-II search (paper §4)
+
+The C++ ECF driver runs **NSGA-II** on the 96-D real-valued genotype:
+
+- **Population**: 200 individuals
+- **Termination**: 30,000 fitness evaluations
+- **Crossover**: integer-adapted SBX, probability 1.0, η_c = 20
+- **Mutation**: one random gene per individual replaced uniformly within
+  bounds — see §9 for the deviation from the paper's polynomial mutation.
+- **Selection**: NSGA-II's standard non-dominated sorting + crowding distance.
+
+ECF's `MOFitnessMin` is used with negated objectives (similarity and
+compression are both maximized; we pass `-similarity` and `-compression`).
+**When reading the milestone files, flip the signs back** to recover the
+paper's Fig. 3 orientation.
+
+### 1.5 Canonical caching (paper §3.3)
+
+Two very different genotypes can decode to the same sequence of effective
+merges — e.g. `[(5,7,1)]` and `[(5,7,1), (6,7,1)]` (the second op is a no-op
+because layers 6, 7 are already collapsed). Their compressed models are
+identical, and so is their fitness. Caching by the **raw genotype** misses
+this; we cache by the **canonical effective-op list** produced by ψ.
+
+Implementation: [ecf/Evaluate.cpp](ecf/Evaluate.cpp):
+`canonicalize()` → `cacheKey()` is `"cb1,ce1;cb2,ce2;..."` (empty string for
+the identity individual, which is short-circuited without IPC at fitness
+`(1.0, 0.0)`).
+
+---
+
+## 2. Architecture
+
+The full search runs **two co-resident processes on a single GPU node**
+connected over two **named FIFOs** in `/tmp`:
+
+```
+                              GELACO_READY_FILE
+                       ┌─────── (sentinel) ───────┐
+                       │                          │
+                       ▼                          │
+            ┌────────────────────┐                │
+            │  PBS launcher      │  poll until ready
+            │  (run_evolution.   │                │
+            │   pbs)             │                │
+            └─────┬─────────┬────┘                │
+                  │ exec    │ background          │
+                  ▼         ▼                     │
+        ┌─────────────────┐  ┌──────────────────┐ │
+        │  ECF (C++)      │  │  server.py       │─┘
+        │  NSGA-II        │  │                  │
+        │  + ψ cache      │  │  loads Llama-2-7B│
+        └────┬────────────┘  │  once, holds it  │
+             │  req FIFO     │  in GPU memory   │
+             │  JSON triples │                  │
+             ├──────────────▶│                  │
+             │               │  deepcopy → ψ →  │
+             │  rsp FIFO     │  fitness         │
+             │  "OK sim comp"│                  │
+             │◀──────────────┤                  │
+             ▼               └──────────────────┘
+        cache key from
+        canonical ψ ops
+```
+
+**Why this shape:** Llama-2-7B takes ~60 s to load and ~14 GB of VRAM.
+30,000 evaluations × 60 s ≈ 500 h just for loading. Holding the model in a
+persistent process and streaming evaluation requests over FIFOs reduces
+that overhead to a one-time cost.
+
+**Why FIFOs, not sockets/zmq:** the two processes always co-locate on the
+same node and need no authentication; FIFOs are dependency-free, line-buffered,
+and trivial to clean up at PBS-job teardown.
+
+**Why the READY sentinel file:** the launcher needs an unambiguous signal that
+the model is in VRAM AND the FIFOs are ready to be opened. A bare PID check
+isn't enough (the process exists during the ~60 s load). The Python side
+writes `GELACO_READY_FILE` after `from_pretrained` returns, and the launcher
+polls for it before `exec`-ing the C++ driver.
+
+### Wire protocol
+
+Line-oriented, blocking on both sides.
+
+**ECF → server (request):**
+```
+[[b1,e1,a1],[b2,e2,a2],...,[b32,e32,a32]]\n
+```
+Or the sentinel:
+```
+QUIT\n
+```
+
+**server → ECF (response):**
+```
+OK <similarity> <compression>\n        ← happy path; both floats in [0,1]
+OK -1.000000 <compression>\n           ← over-aggressive merge → NaN fitness, clamped to worst-case
+ERR 0.0 0.0 <single-line error>\n      ← evaluator raised an exception
+```
+
+The C++ side treats any non-`OK` tag as a worst-case fitness and continues —
+the search is **never aborted** by a single bad individual.
+
+---
+
+## 3. Repository layout
+
+```
+re-GeLaCo/
+├── README.md                  # this file (architecture, code, params)
+├── README_EVOLUTION.md        # cluster-deployment runbook with checkpoints
+├── requirements.txt           # Python deps
+│
+├── config.py                  # All constants and FIFO/READY env-var paths
+├── data_loader.py             # 64 Wikipedia calibration sentences (seeded)
+├── layer_merge.py             # Differential merge + iterative ψ mapping
+├── fitness.py                 # Hook-based module-wise similarity fitness
+│
+├── evaluate.py                # Prototype entry: one merge → one fitness
+├── server.py                  # Persistent evaluator (FIFO loop)
+│
+├── ecf/                       # ECF C++ NSGA-II driver
+│   ├── Evaluate.h             # Evaluator class declaration
+│   ├── Evaluate.cpp           # decode + ψ + cache + FIFO IPC
+│   ├── main.cpp               # ECF entry point
+│   ├── Makefile               # links against $ECF_ROOT
+│   └── parameters.txt         # NSGA-II hyperparameters (ECF XML)
+│
+├── run_prototype.pbs          # PBS job: single evaluation
+└── run_evolution.pbs          # PBS job: spawn server + ECF + cleanup
+```
+
+### What each Python module does
+
+| File | Public surface | Notes |
+|---|---|---|
+| [config.py](config.py) | Module-level constants: `MODEL_NAME`, `NUM_ORIGINAL_LAYERS`, `NUM_CALIBRATION_SENTENCES`, `MAX_SENTENCE_LENGTH`, `RANDOM_SEED`, `FIFO_REQ_PATH`, `FIFO_RSP_PATH`, `READY_FILE`. | FIFO paths read from env (`GELACO_REQ_FIFO`, …) with sensible defaults for interactive testing. |
+| [data_loader.py](data_loader.py) | `load_calibration_sentences()` → `list[str]` | Streams Wikipedia, dedupes, picks 64 sentences with `RANDOM_SEED=42` for reproducibility. Uses a hard-exit workaround on shutdown to avoid PyArrow background-thread segfaults. |
+| [layer_merge.py](layer_merge.py) | `apply_differential_merge`, `remove_collapsed_layers`, `apply_merge_operations`, `canonical_effective_ops`, `_replay_psi` | The paper's ψ logic lives here. The `__main__` block runs four assertions including the overlapping-genotype case. |
+| [fitness.py](fitness.py) | `compute_fitness(..., verbose=True)` | `verbose=False` silences the 64-line-per-eval log spam — the server passes `False`, the prototype passes `True`. |
+| [evaluate.py](evaluate.py) | `main()` | One-shot: load model, deepcopy, apply `config.MERGE_OPERATIONS`, compute fitness, print. |
+| [server.py](server.py) | `main()` | Persistent loop: read JSON triples from req FIFO, evaluate, write `OK sim comp` to rsp FIFO. NaN sanitization, VRAM cleanup, `QUIT` shutdown, hard-exit on finalize. |
+
+### What each C++ file does
+
+| File | Role |
+|---|---|
+| [ecf/main.cpp](ecf/main.cpp) | ~40-line driver. Constructs `State`, registers `GeLaCoEvaluateOp`, adds a `FloatingPoint::FloatingPoint` genotype, calls `state->initialize(argc, argv)` then `state->run()`. |
+| [ecf/Evaluate.h](ecf/Evaluate.h) | `class GeLaCoEvaluateOp : public EvaluateOp`. Constants `L_LAYERS=32`, `N_VARS=96`. Fields: `cache_`, `reqFd_`, `rspFd_`, `rspBuf_`, `evalCount_`, `cacheHits_`. |
+| [ecf/Evaluate.cpp](ecf/Evaluate.cpp) | `initialize()` polls READY then opens FIFOs. `evaluate(individual)` does decode → canonicalize → cache lookup → (cache hit ∥ FIFO query) → `MOFitness` with two negated values. Stats every 50 evals to stderr. |
+| [ecf/Makefile](ecf/Makefile) | `g++ -std=c++14 -O2 -I$ECF_ROOT/include -L$ECF_ROOT/lib -lecf -lpthread`. Builds `./gelaco_ecf`. |
+| [ecf/parameters.txt](ecf/parameters.txt) | ECF XML config. Read in §4.2 below. |
+
+---
+
+## 4. Configuration & parameters
+
+There are three places parameters live, depending on which side owns them.
+
+### 4.1 Python-side ([config.py](config.py))
+
+| Constant | Default | Meaning |
+|---|---|---|
+| `MODEL_NAME` | `meta-llama/Llama-2-7b-hf` | HF repo of the base model. |
+| `TORCH_DTYPE` | `"float16"` | Inference dtype. |
+| `NUM_ORIGINAL_LAYERS` | `32` | Hard constant for Llama-2-7B (`config.num_hidden_layers`). |
+| `NUM_CALIBRATION_SENTENCES` | `64` | Paper §4. Reducing this *biases* the fitness — only do it to reduce VRAM if forced. |
+| `MAX_SENTENCE_LENGTH` | `128` | Token cap; longer sentences are truncated. |
+| `RANDOM_SEED` | `42` | Used by both the dataset sampler and the ECF randomizer (`parameters.txt:randomizer.seed`). |
+| `DEVICE` | `"cuda"` | `"cpu"` works for unit tests but not real evaluations. |
+| `MERGE_OPERATIONS` | `[(5, 7, 1)]` | Only consumed by `evaluate.py` — the genotype for the single-eval prototype. Ignored by `server.py`. |
+| `FIFO_REQ_PATH` / `FIFO_RSP_PATH` / `READY_FILE` | `/tmp/gelaco_{req,rsp,ready}` (overridable via env) | Per-job paths are injected by `run_evolution.pbs` (`/tmp/gelaco_*.$PBS_JOBID`) so concurrent jobs on the same node don't collide. |
+
+### 4.2 ECF-side ([ecf/parameters.txt](ecf/parameters.txt))
+
+XML schema is ECF's. Keys are the **registered names** found in ECF 1.6.1's
+`Population.cpp`, `TermMaxEvalOp.cpp`, `Mutation.cpp`, and
+`floatingpoint/FloatingPointCrsSbx.cpp` / `FloatingPointMutSimple.cpp`.
+
+```xml
+<Algorithm>
+    <NSGA2/>               <!-- NSGA-II takes no registered parameters -->
+</Algorithm>
+
+<Genotype>
+    <FloatingPoint>
+        <Entry key="dimension">96</Entry>          <!-- 3 * 32 -->
+        <Entry key="lbound">0.0</Entry>            <!-- per-gene lower bound -->
+        <Entry key="ubound">31.0</Entry>           <!-- per-gene upper bound -->
+        <Entry key="crx.sbx">1.0</Entry>           <!-- SBX probability (must sum to 1 across crx ops) -->
+        <Entry key="mut.simple">1.0</Entry>        <!-- mutation operator weight; normalized -->
+    </FloatingPoint>
+</Genotype>
+
+<Registry>
+    <Entry key="randomizer.seed">42</Entry>
+    <Entry key="population.size">200</Entry>       <!-- paper §4 -->
+    <Entry key="term.eval">30000</Entry>           <!-- paper §4 termination criterion -->
+    <Entry key="crx.sbx.ni">20</Entry>             <!-- SBX η_c (uint, in Registry not Genotype) -->
+    <Entry key="mutation.indprob">1.0</Entry>      <!-- per-individual mutation probability -->
+    <Entry key="batch.repeats">1</Entry>
+    <Entry key="log.level">3</Entry>
+    <Entry key="log.filename">ecf.log</Entry>
+    <Entry key="log.frequency">1</Entry>
+    <Entry key="milestone.filename">milestone.txt</Entry>
+    <Entry key="milestone.interval">500</Entry>    <!-- Pareto-archive dump every 500 evals -->
+</Registry>
+```
+
+**The C++ decoder enforces the activation-bit semantics.** ECF's
+`FloatingPoint` uses scalar `lbound`/`ubound`, so slot `3i+2` is also
+continuous in `[0, 31]`. In [ecf/Evaluate.cpp:`decode`](ecf/Evaluate.cpp) we
+threshold at the midpoint:
+
+```cpp
+double xa = v[3*i + 2];
+int a = (xa >= 0.5 * (L_LAYERS - 1)) ? 1 : 0;
+```
+
+This gives a roughly uniform 50/50 split of active vs inactive triples in a
+random initial population.
+
+### 4.3 PBS-side ([run_evolution.pbs](run_evolution.pbs))
+
+| Directive | Value | Why |
+|---|---|---|
+| `#PBS -q gpu` | gpu queue | A100 nodes |
+| `#PBS -l select=1:ncpus=8:ngpus=1:mem=80GB` | one A100 | enough headroom for fp16 + deepcopy (~28 GB peak) |
+| `#PBS -l walltime=72:00:00` | 72 h | ~30 k evals × few s each, minus cache hits |
+| `http_proxy / https_proxy` | `http://10.150.1.1:3128` | Supek squid proxy; required for HF download |
+| `module load cray-python/3.11.7` | Python 3.11 | matches the prototype |
+| `ECF_ROOT` | `$HOME/ecf-install` | resolves `libecf.a` and headers |
+| FIFO paths | `/tmp/gelaco_{req,rsp,ready}.$PBS_JOBID` | per-job isolation |
+
+The script (i) `mkfifo`s the two FIFOs, (ii) starts `server.py` in the
+background, (iii) polls for `GELACO_READY_FILE` (up to 15 min), (iv) execs
+`./ecf/gelaco_ecf ecf/parameters.txt` in the foreground, (v) on exit/EXIT/INT/TERM
+writes `QUIT` to the req FIFO and waits up to 30 s before SIGTERM/SIGKILL,
+then `rm`s the FIFOs.
+
+---
+
+## 5. Setup
+
+> Cluster-specific commands are in [README_EVOLUTION.md](README_EVOLUTION.md).
+> The block below is the minimal local checklist.
+
+### 5.1 SSH and proxy (Supek)
 
 ```bash
 ssh tsegvic@login-gpu.hpc.srce.hr
-```
-(replace tsegvic with your username)
-
-
-### 2. Configure ~/.bashrc (do this once)
-
-#### 2.1 Set up proxy (required for internet access)
-
-Worker nodes need the squid proxy. Add to your `~/.bashrc` or run manually:
-
-```bash
-echo 'export http_proxy="http://10.150.1.1:3128"' >> ~/.bashrc
+echo 'export http_proxy="http://10.150.1.1:3128"'  >> ~/.bashrc
 echo 'export https_proxy="http://10.150.1.1:3128"' >> ~/.bashrc
+```
+
+### 5.2 HuggingFace token
+
+Llama-2 is gated. Accept the license at
+<https://huggingface.co/meta-llama/Llama-2-7b-hf>, then:
+
+```bash
+echo 'export HF_TOKEN="hf_..."' >> ~/.bashrc
 source ~/.bashrc
 ```
 
-#### 2.2 HuggingFace authentication
-
-Llama-2 requires a HuggingFace token with access to `meta-llama/Llama-2-7b-hf`.
-
-```bash
-echo 'export HF_TOKEN="hf_YOUR_TOKEN_HERE"' >> ~/.bashrc
-source ~/.bashrc
-```
-
-**Option B: Using huggingface-cli**
-
-```bash
-pip install huggingface_hub
-huggingface-cli login
-# Paste your HF token when prompted
-```
-
-> **Note**: You need to accept the Llama-2 license at
-> https://huggingface.co/meta-llama/Llama-2-7b-hf before downloading.
-> By default, HuggingFace caches models in `~/.cache/huggingface/`
-
-### 3. Set python versions
-
-By default python version is 3.6, we need python 3.11.7:
+### 5.3 Python environment
 
 ```bash
 module load cray-python/3.11.7
-```
-
-### 4. Clone the repository
-
-```bash
-cd ~
-git clone https://github.com/Tonka12345/re-GeLaCo.git
-cd re-GeLaCo
-git checkout evaluation-testing
-```
-
-### 5. Create virtual environment
-
-```bash
+cd ~/re-GeLaCo
 python3 -m venv venv
 source venv/bin/activate
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
----
-
-## Running the Prototype
-
-### Option A: Interactive GPU Session (recommended for testing)
+### 5.4 Build ECF (only needed for the full search)
 
 ```bash
-# Request interactive session with 1 GPU
+cd ~
+git clone http://gitlab.zemris.fer.hr/yeti/ecf.git    # or a known mirror
+cd ecf && mkdir build && cd build
+cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ecf-install -DCMAKE_BUILD_TYPE=Release
+make -j8 && make install
+
+echo 'export ECF_ROOT=$HOME/ecf-install' >> ~/.bashrc
+echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
+source ~/.bashrc
+
+cd ~/re-GeLaCo/ecf && make        # produces ./gelaco_ecf
+```
+
+---
+
+## 6. Running the prototype (single evaluation)
+
+The prototype hard-codes `MERGE_OPERATIONS = [(5, 7, 1)]` in
+[config.py](config.py) and runs **one** fitness evaluation. Use it to sanity-check
+the merge math, the calibration sentences, and the GPU pipeline.
+
+### Interactive
+
+```bash
 qsub -I -q gpu -l select=1:ncpus=8:ngpus=1:mem=64GB -l walltime=02:00:00
-
-# Once on the GPU node, re-export environment variables (worker nodes start a fresh shell that may not source your .bashrc automatically):
-
+# in the interactive session:
 export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
-export HF_TOKEN="YOUR_TOKEN_HERE"
-export HF_HOME="/lustre/home/tsegvic/.hf_cache"
-
+export HF_TOKEN="hf_..."
 cd ~/re-GeLaCo
+module load cray-python/3.11.7
 source venv/bin/activate
-
-# Run the prototype
 python evaluate.py
 ```
 
-### Option B: Batch Job
+### Batch
 
 ```bash
 cd ~/re-GeLaCo
 qsub run_prototype.pbs
-```
-
-Check job status:
-
-```bash
 qstat -u $USER
+cat gelaco-proto.o*
 ```
 
-View output:
-
-```bash
-cat gelaco-proto.o*   # stdout
-cat gelaco-proto.e*   # stderr
-```
-
----
-
-## Expected Output
+### Expected output
 
 ```
 ============================================================
@@ -156,22 +457,159 @@ cat gelaco-proto.e*   # stderr
 Model:            meta-llama/Llama-2-7b-hf
 Merge operations: [(5, 7, 1)]
 ...
+[Fitness] === FINAL RESULTS ===
   Attention similarity:    0.XXXXXX
   FFN similarity:          0.XXXXXX
   Hidden state similarity: 0.XXXXXX
-  ─────────────────────────────────
   Overall fitness:         0.XXXXXX
 ```
 
-## Memory Requirements
+---
 
-- Llama-2-7B fp16: ~14 GB VRAM
-- Deep copy: ~14 GB additional
-- Activations + overhead: ~4-6 GB
-- **Total: ~32-34 GB** (fits on A100 40GB)
+## 7. Running the full evolutionary search
 
-## Future: ECF Integration
+See [README_EVOLUTION.md](README_EVOLUTION.md) for the step-by-step deployment
+runbook with checkpoints. The short version:
 
-This prototype is structured so `evaluate.py` can later be called from ECF's
-C++ `evaluate()` operator via `subprocess` or Python/C++ bindings. The merge
-operations list in `config.py` will be replaced by ECF's genotype.
+```bash
+cd ~/re-GeLaCo
+qsub run_evolution.pbs
+qstat -u $USER
+tail -f server.log gelaco-evo.o*
+```
+
+The job:
+1. mkfifo's `/tmp/gelaco_{req,rsp}.$PBS_JOBID`.
+2. Launches `server.py`, which loads Llama-2-7B (~60 s) and writes
+   `GELACO_READY_FILE`.
+3. Polls READY, then launches `./ecf/gelaco_ecf ecf/parameters.txt`.
+4. ECF runs NSGA-II, sending `[[b,e,a],...]` requests through the req FIFO
+   and reading `OK sim comp` responses from the rsp FIFO.
+5. On termination (30,000 evals) or any signal: writes `QUIT` to req,
+   waits ≤30 s, then cleans up.
+
+### Smoke test before the full run
+
+To validate the IPC + cache + parameters before committing to 72 h:
+
+```bash
+cp ecf/parameters.txt ecf/parameters.smoke.txt
+sed -i 's|<Entry key="population.size">200</Entry>|<Entry key="population.size">8</Entry>|' ecf/parameters.smoke.txt
+sed -i 's|<Entry key="term.eval">30000</Entry>|<Entry key="term.eval">20</Entry>|'           ecf/parameters.smoke.txt
+
+cp run_evolution.pbs run_evolution.smoke.pbs
+sed -i 's|walltime=72:00:00|walltime=01:00:00|'                   run_evolution.smoke.pbs
+sed -i 's|gelaco-evo|gelaco-smoke|'                               run_evolution.smoke.pbs
+sed -i 's|ecf/parameters.txt|ecf/parameters.smoke.txt|'           run_evolution.smoke.pbs
+
+qsub run_evolution.smoke.pbs
+```
+
+Expect ~20 evaluations completing in a few minutes, real `sim` numbers in
+`[0, 1]`, and a non-zero cache hit rate.
+
+---
+
+## 8. Output artifacts
+
+After a full run:
+
+| Path | Producer | Contents |
+|---|---|---|
+| `gelaco-evo.o<JOBID>` | PBS | Combined stdout+stderr of the launcher, server, and ECF. |
+| `server.log` | server.py | One `[server …] eval #N ops=… sim=… comp=… (…s, alloc=…GB)` line per evaluation. |
+| `ecf.log` | ECF | Per-generation `Stats: fitness …` (NSGA-II reports rank-like stats here — the real objectives are in `milestone.txt`). |
+| `milestone.txt` | ECF | XML snapshot of the population and Pareto archive every 500 evals. **Objectives are negated** (`MOFitnessMin`); flip signs to plot in paper-Fig. 3 orientation. |
+| stderr of ECF | C++ driver | `[GeLaCo] eval=N hits=K hitRate=…% last=(sim=…, comp=…)` every 50 evals. A healthy run grows `hitRate` from ~0% early to ~20–60% late as the population converges. |
+
+**Post-processing into a Pareto plot:** parse `milestone.txt`, extract the
+final generation's individuals' two objectives, negate them, plot `comp` on x
+and `sim` on y. Expected shape: monotone-decreasing similarity as compression
+grows (paper Fig. 3).
+
+---
+
+## 9. Deviations from the paper
+
+Honest accounting of where ECF 1.6.1's available operator set forced us to
+deviate from paper §4. None of these affect the bi-objective NSGA-II logic
+itself; they affect only the per-gene variation distribution.
+
+| Paper §4 | This implementation | Reason |
+|---|---|---|
+| SBX crossover, p = 0.9 | SBX, **p = 1.0** | ECF requires per-genotype crossover probabilities to sum to 1.0, and no other crossover operator was used. |
+| SBX η_c = 20 (real) | η_c = 20 (uint) | ECF registers `crx.sbx.ni` as `UINT`. |
+| Polynomial mutation, p = 1/96 per gene, η_m = 20 | `mut.simple` (uniform 1-gene replacement) at `mutation.indprob = 1.0` | The polynomial mutation operator is not implemented in ECF 1.6.1 for `FloatingPoint`. The closest available is `mut.simple`, which replaces **one** random gene per call with a uniform draw from `[lbound, ubound]`. With `mutation.indprob = 1.0`, this gives the same expected **count** of mutated genes per individual as the paper (96 × 1/96 = 1), but the perturbation distribution is uniform-global rather than polynomial-local. |
+
+These deviations are documented in the head comment of
+[ecf/parameters.txt](ecf/parameters.txt).
+
+---
+
+## 10. Memory and runtime budgets
+
+### Memory (A100 40 GB)
+
+| Item | VRAM |
+|---|---|
+| Llama-2-7B fp16 weights | ~13 GB |
+| Deep copy during evaluation | ~13 GB (peak) |
+| Activations + hooks during fwd pass | ~4–6 GB |
+| **Peak** | **~28–32 GB** |
+
+`server.py` `del`s the compressed copy and calls `torch.cuda.empty_cache()` +
+`gc.collect()` between evaluations, so steady-state usage drops back to ~14 GB
+between requests.
+
+### Runtime
+
+| Phase | Cost |
+|---|---|
+| Model load + sentences | ~60–120 s (one-time, server start) |
+| One uncached evaluation | ~3–5 s (forward × 64 sentences × 2 models) |
+| One cache hit | ~tens of µs |
+| 30,000 evals @ ~30% cache hit | ~17–20 h ECF time + 1 min server start ≈ 20 h (well inside the 72 h wall) |
+
+The 72 h wall is generous; we want headroom for high-compression individuals
+(which fail to NaN and are clamped, but still need a forward pass to detect)
+and for low cache-hit phases early in the search.
+
+---
+
+## 11. Troubleshooting
+
+### "Server hangs at `opening req FIFO ... (blocking)`"
+Expected. Named-FIFO `open()` blocks until the peer connects. The PBS script
+ensures ECF starts after `GELACO_READY_FILE` is written. When testing manually
+outside PBS, use the background-write pattern: `( echo '[[5,7,1]]' > "$REQ" ) &`.
+
+### Server returns `sim=nan`
+Over-aggressive merges (e.g. 30/32 layers collapsed) produce numerically
+unstable logits and NaN similarities. `server.py` clamps NaN/Inf to `sim=-1.0`
+and tags the log line `[NaN→-1.0]`. NSGA-II then dominates these individuals
+out without poisoning the front.
+
+### `Warning: key … not registered` in `ecf.log`
+The parameter key is not registered in your ECF version. Check the actual
+registration in `$ECF_ROOT/include/ECF/*.cpp` via
+`grep registerParameter` / `grep registerEntry`. ECF 1.6.1's correct keys are
+in §4.2 above.
+
+### `Warning: FloatingPoint crossover operators: cumulative probability not equal to 1`
+The sum of `crx.*` probabilities on the FloatingPoint genotype doesn't equal
+1.0. With only SBX active, set `crx.sbx = 1.0`.
+
+### CUDA OOM mid-run
+The deepcopy briefly peaks at ~28 GB. If you're at the edge, reduce
+`NUM_CALIBRATION_SENTENCES` in [config.py](config.py) — but note this biases
+the fitness (paper uses 64).
+
+### HF download fails on worker node
+`http_proxy` / `https_proxy` not exported in the worker shell. Re-export them
+after `qsub -I`, or add them to `~/.bashrc` (Supek worker shells inherit it).
+
+### ECF stats show `max=1 min=1 stdev=0`
+ECF's per-generation stats reports a single scalar (rank-like) for
+multi-objective individuals — the real two objectives live in `milestone.txt`.
+A `stdev=0` here doesn't mean the search has collapsed; check the milestone
+files instead.
