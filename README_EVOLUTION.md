@@ -98,12 +98,11 @@ Add to `~/.bashrc` (one-time):
 echo 'export ECF_ROOT=$HOME/ecf-install' >> ~/.bashrc
 echo 'export LD_LIBRARY_PATH=$ECF_ROOT/lib:$LD_LIBRARY_PATH' >> ~/.bashrc
 source ~/.bashrc
-```
-
-### 2.3
 
 cp ./libECF.a $ECF_ROOT/lib/
 cp -r ../ECF $ECF_ROOT/include/
+
+```
 
 ### 2.3 Verify the install layout
 
