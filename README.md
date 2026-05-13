@@ -1,15 +1,15 @@
-# GeLaCo — Bi-objective Evolutionary Layer Collapse for LLM Compression
+# GeLaCo — Generative Layer Collapse for LLM Compression
 
 A reproduction of the **GeLaCo** method from
 [arXiv:2507.10059](https://arxiv.org/abs/2507.10059), targeting **Llama-2-7B**
 on the **Supek** HPC cluster.
 
 GeLaCo compresses a pre-trained LLM by **collapsing groups of consecutive
-transformer blocks** into one. Which groups to collapse — and how many — is
-discovered automatically by a **bi-objective genetic algorithm (NSGA-II)** that
+transformer layers** into one. Which groups to collapse — and how many — is
+discovered by a **NSGA-II algorithm** that
 trades **module-wise output similarity** (preserved quality) against
 **compression ratio** (layers removed). The result is a Pareto front of
-compressed checkpoints rather than a single point.
+compressed checkpoints.
 
 This repository contains the full evolutionary search:
 [server.py](server.py) loads Llama-2-7B once and services fitness requests
@@ -36,7 +36,7 @@ its `README.md` for that workflow.
 
 ## 1. Algorithm overview
 
-### 1.1 Layer collapse via differential weight merging (paper §3.1)
+### 1.1 Layer collapse via differential weight merging
 
 A *merge operation* `(b, e)` collapses the consecutive layer range `[b..e]` of
 the model into a single layer at index `b`, using the LaCo-style differential
@@ -51,7 +51,7 @@ The collapsed layers `[b+1..e]` are then removed from the `ModuleList`, and
 [layer_merge.py](layer_merge.py): `apply_differential_merge`,
 `remove_collapsed_layers`.
 
-### 1.2 Genotype and ψ mapping (paper §3.1)
+### 1.2 Genotype and ψ mapping
 
 For an `L`-layer model (L=32 for Llama-2-7B), each individual is a fixed-length
 genome of **`3L = 96` integers**, encoded as `L = 32` consecutive triples:
@@ -90,12 +90,8 @@ bit-for-bit in C++** in [ecf/Evaluate.cpp:`canonicalize`](ecf/Evaluate.cpp) so
 that cache keys derived from the canonical effective-op list agree across the
 bridge.
 
-A common pitfall — using a static `cumulative_removed` offset instead of the
-dynamic per-op remap — is **incorrect for overlapping genotypes** and is
-explicitly tested against in [layer_merge.py](layer_merge.py)'s
-`__main__` block.
 
-### 1.3 Fitness: module-wise similarity (paper §3.2)
+### 1.3 Fitness: module-wise similarity
 
 For each of `N = 64` Wikipedia calibration sentences:
 
@@ -119,12 +115,12 @@ The individual's overall **similarity** objective is the mean fitness over all
 Both objectives are in `[0, 1]` and both are **maximized**. See
 [fitness.py](fitness.py): `compute_fitness`.
 
-### 1.4 NSGA-II search (paper §4)
+### 1.4 NSGA-II search
 
 The C++ ECF driver runs **NSGA-II** on the 96-D real-valued genotype:
 
 - **Population**: 200 individuals
-- **Termination**: 30,000 fitness evaluations
+- **Termination**: 30,000 fitness evaluations (we are currently testing on less but plan to do more in future -> **TODO**)
 - **Crossover**: integer-adapted SBX, probability 1.0, η_c = 20
 - **Mutation**: one random gene per individual replaced uniformly within
   bounds — see §8 for the deviation from the paper's polynomial mutation.
@@ -135,13 +131,12 @@ compression are both maximized; we pass `-similarity` and `-compression`).
 **When reading the milestone files, flip the signs back** to recover the
 paper's Fig. 3 orientation.
 
-### 1.5 Canonical caching (paper §3.3)
+### 1.5 Canonical caching
 
 Two very different genotypes can decode to the same sequence of effective
 merges — e.g. `[(5,7,1)]` and `[(5,7,1), (6,7,1)]` (the second op is a no-op
 because layers 6, 7 are already collapsed). Their compressed models are
-identical, and so is their fitness. Caching by the **raw genotype** misses
-this; we cache by the **canonical effective-op list** produced by ψ.
+identical, and so is their fitness. We cache by the **canonical effective-op list** produced by ψ (Caching by the **raw genotype** is bad idea).
 
 Implementation: [ecf/Evaluate.cpp](ecf/Evaluate.cpp):
 `canonicalize()` → `cacheKey()` is `"cb1,ce1;cb2,ce2;..."` (empty string for
@@ -242,7 +237,7 @@ re-GeLaCo/
 │   ├── Evaluate.cpp           # decode + ψ + cache + FIFO IPC
 │   ├── main.cpp               # ECF entry point
 │   ├── Makefile               # links against $ECF_ROOT
-│   └── parameters.txt         # NSGA-II hyperparameters (ECF XML)
+│   └── parameters.txt         # ECF XML
 │
 └── run_evolution.pbs          # PBS job: spawn server + ECF + cleanup
 ```
@@ -374,7 +369,6 @@ cat >> ~/.bashrc <<'EOF'
 export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
 export HF_TOKEN="hf_REPLACE_ME_WITH_REAL_TOKEN"
-EOF
 source ~/.bashrc
 ```
 
@@ -407,13 +401,18 @@ ECF (Evolutionary Computation Framework) is not pre-installed on Supek. Build
 it once into `$HOME/ecf-install/` on the login node:
 
 ```bash
-cd ~
-git clone http://gitlab.zemris.fer.hr/yeti/ecf.git
-cd ecf
-mkdir -p build && cd build
-cmake .. -DCMAKE_INSTALL_PREFIX=$HOME/ecf-install -DCMAKE_BUILD_TYPE=Release
-make -j8
-make install
+mkdir tmp
+mkdir -p ecf-install/lib
+mkdir -p ecf-install/include
+cd ./tmp
+git clone https://github.com/djakobovic/ECF.git
+cd ECF
+mkdir build && cd build
+cmake .. -DCMAKE_CXX_FLAGS="-fpermissive"
+cmake --build . --config Release
+
+cp ./libECF.a $HOME/ecf-install/lib/
+cp -r ../ECF $HOME/ecf-install/include/
 ```
 
 Verify the install:
