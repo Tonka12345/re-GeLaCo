@@ -13,8 +13,8 @@
 #include <iostream>
 #include <memory>
 
-#include <ECF/ECF.h>
-#include <ECF/FloatingPoint/FloatingPoint.h>
+#include <ECF.h>
+#include <floatingpoint/FloatingPoint.h>
 
 #include "Evaluate.h"
 

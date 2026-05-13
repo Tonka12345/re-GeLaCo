@@ -3,3 +3,10 @@ __pycache__
 .hf_cache
 .cache
 .DS_Store
+server.log
+main.o
+Evaluate.o
+gelaco_ecf
+build
+build.log
+ecf.log

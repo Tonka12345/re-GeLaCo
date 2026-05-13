@@ -29,7 +29,7 @@
 #include <utility>
 #include <vector>
 
-#include <ECF/ECF.h>
+#include <ECF.h>
 
 class GeLaCoEvaluateOp : public EvaluateOp {
 public:

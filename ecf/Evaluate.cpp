@@ -19,7 +19,7 @@
 #include <thread>
 #include <unistd.h>
 
-#include <ECF/FloatingPoint/FloatingPoint.h>
+#include <floatingpoint/FloatingPoint.h>
 
 namespace {
 
@@ -265,10 +265,17 @@ FitnessP GeLaCoEvaluateOp::evaluate(IndividualP individual) {
     // ECF's NSGA-II uses MOFitnessMin (minimization). Both of our objectives
     // are "more is better" (similarity↑, compression ratio↑), so we feed the
     // negated values; the Pareto-front consumer must un-negate. This is the
-    // standard pattern shown in ECF's Simple_NSGA2 example.
-    FitnessP out(new MOFitnessMin);
-    std::vector<double> objs = { -fit.first, -fit.second };
-    out->setObjectives(objs);
+    MOFitness* mofit = new MOFitness;
+    
+    FitnessP obj1(new FitnessMin);
+    obj1->setValue(-fit.first);
+    mofit->push_back(obj1);
+    
+    FitnessP obj2(new FitnessMin);
+    obj2->setValue(-fit.second);
+    mofit->push_back(obj2);
+    
+    FitnessP out(mofit);
 
     if (evalCount_ % 50 == 0) {
         std::cerr << "[GeLaCo] eval=" << evalCount_
