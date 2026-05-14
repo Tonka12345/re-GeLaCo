@@ -15,14 +15,6 @@ This repository contains the full evolutionary search:
 [evaluator/server.py](evaluator/server.py) loads Llama-2-7B once and services fitness
 requests over named FIFOs from a C++ NSGA-II driver in [ecf/](ecf/).
 
-Two run configurations are provided:
-
-- **5h variant** (current) — 4,000 evaluations, ~20 generations. Produces a
-  real but under-converged Pareto front. Fits in shared GPU queues easily.
-- **72h variant** (paper-faithful, planned) — 30,000 evaluations,
-  ~150 generations. Matches the paper exactly. **Not yet executed** — needs a
-  72 h slot in the GPU queue.
-
 A separate single-evaluation prototype lives on the `evaluation-testing`
 branch — see its `README.md` for that workflow.
 
@@ -660,9 +652,9 @@ computes the **non-dominated subset under maximization**, and plots:
   distorting the y-axis
 
 Result for the 5h run (committed at
-[visualization/pareto_5h.png](visualization/pareto_5h.png)):
+[visualization/pareto_5h.png](visualization/pareto_4000.png)):
 
-![5h Pareto front](visualization/pareto_5h.png)
+![5h Pareto front](visualization/pareto_4000.png)
 
 The shape is the expected monotone decrease: as compression grows from 12.5%
 to 93.75%, similarity falls from 0.49 to 0.006. The 72h run will fill out
