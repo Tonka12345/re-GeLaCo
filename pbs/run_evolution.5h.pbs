@@ -1,20 +1,16 @@
 #!/bin/bash
-#PBS -N gelaco-evo
+#PBS -N gelaco-5h
 #PBS -q gpu
 #PBS -l select=1:ncpus=8:ngpus=1:mem=80GB
-#PBS -l walltime=72:00:00
+#PBS -l walltime=05:00:00
 #PBS -j oe
 
 # ============================================================================
-# GeLaCo NSGA-II — full evolutionary search on Supek (PBS)
+# GeLaCo NSGA-II — 5-hour variant on Supek (PBS)
 # ----------------------------------------------------------------------------
-# Co-runs:
-#   1. server.py  — Python persistent evaluator (loads Llama-2-7B once)
-#   2. gelaco_ecf — C++ NSGA-II driver (compiled from ecf/)
-# Communication: two named FIFOs in /tmp, qualified by $PBS_JOBID so multiple
-# jobs on the same node never collide.
-# Synchronization: server.py writes $GELACO_READY_FILE once the model is
-# loaded and FIFOs are open; the launcher polls that file before exec'ing ECF.
+# Same structure as run_evolution.pbs but caps termination at 4,000 evaluations
+# (~20 generations of popSize=200) and routes all outputs to *-5h filenames so
+# it can coexist with a queued or running 72 h job in the same workdir.
 # ============================================================================
 
 set -u
@@ -23,7 +19,6 @@ set -u
 export http_proxy="http://10.150.1.1:3128"
 export https_proxy="http://10.150.1.1:3128"
 
-# HF_TOKEN must be inherited from ~/.bashrc. Sanity check:
 if [ -z "${HF_TOKEN:-}" ]; then
     echo "ERROR: HF_TOKEN not set. Add 'export HF_TOKEN=...' to ~/.bashrc." >&2
     exit 1
@@ -49,7 +44,7 @@ export GELACO_RSP_FIFO="$RSP"
 export GELACO_READY_FILE="$READY"
 
 echo "============================================"
-echo "GeLaCo NSGA-II"
+echo "GeLaCo NSGA-II  (5-hour variant)"
 echo "============================================"
 echo "Job ID:    $PBS_JOBID"
 echo "Node:      $(hostname)"
@@ -64,17 +59,14 @@ nvidia-smi || true
 echo "============================================"
 
 # --- Cleanup hook -----------------------------------------------------------
-# Idempotent and runs at most once even if the trap fires for both EXIT and TERM.
 CLEANUP_DONE=0
 cleanup() {
     [ "$CLEANUP_DONE" -eq 1 ] && return
     CLEANUP_DONE=1
     echo "[cleanup] tearing down"
     if [ -n "${PY_PID:-}" ] && kill -0 "$PY_PID" 2>/dev/null; then
-        # Politely ask the server to QUIT via the req FIFO, but bound the wait:
-        # if the server is already dead and no reader is attached, opening the
-        # FIFO for write blocks forever. `timeout 5` caps that at 5 s, after
-        # which we fall through to SIGTERM/SIGKILL below.
+        # If the server already exited, opening the FIFO for write blocks
+        # forever (no reader). `timeout 5` caps that wait.
         timeout 5 sh -c "echo QUIT > '$REQ'" 2>/dev/null || true
         for i in $(seq 1 30); do
             kill -0 "$PY_PID" 2>/dev/null || break
@@ -90,10 +82,10 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 # --- Start Python server in background --------------------------------------
-echo "[launch] starting server.py"
-python server.py > server.log 2>&1 &
+echo "[launch] starting evaluator/server.py"
+python evaluator/server.py > server-5h.log 2>&1 &
 PY_PID=$!
-echo "[launch] server PID=$PY_PID; logs → server.log"
+echo "[launch] server PID=$PY_PID; logs → server-5h.log"
 
 # --- Wait for READY (model load can take ~60–120 s) -------------------------
 echo "[launch] waiting for $READY ..."
@@ -104,24 +96,23 @@ for i in $(seq 1 180); do      # up to 15 min
     fi
     if ! kill -0 "$PY_PID" 2>/dev/null; then
         echo "ERROR: server.py died before becoming ready. Last log:" >&2
-        tail -n 80 server.log >&2 || true
+        tail -n 80 server-5h.log >&2 || true
         exit 1
     fi
     sleep 5
 done
 if [ ! -f "$READY" ]; then
     echo "ERROR: timed out waiting for server.py to become ready" >&2
-    tail -n 80 server.log >&2 || true
+    tail -n 80 server-5h.log >&2 || true
     exit 1
 fi
 
 # --- Run ECF (long-running, foreground) -------------------------------------
-echo "[launch] starting ECF NSGA-II"
-./ecf/gelaco_ecf ecf/parameters.txt
+echo "[launch] starting ECF NSGA-II  (parameters.5h.txt, term.eval=4000)"
+./ecf/gelaco_ecf ecf/parameters.5h.txt
 ECF_RC=$?
 echo "[launch] ECF exited with code $ECF_RC"
 
-# --- Shutdown handled by trap -----------------------------------------------
 echo "============================================"
 echo "Job completed at: $(date)"
 echo "============================================"

@@ -47,7 +47,7 @@ nvidia-smi
 echo "============================================"
 
 # --- Run the prototype ---
-python evaluate.py
+python evaluator/evaluate.py
 
 echo ""
 echo "============================================"

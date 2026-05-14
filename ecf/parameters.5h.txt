@@ -1,0 +1,44 @@
+<ECF>
+
+    <!--
+      GeLaCo bi-objective configuration — 5-hour variant.
+
+      Identical to ecf/parameters.txt except:
+        * term.eval reduced from 30,000 to 4,000  (~20 generations of popSize=200
+          at ~4 s/eval ≈ 4–5 h wall, with safety margin for the 5 h PBS walltime).
+        * log/milestone filenames suffixed with -5h so concurrent runs in the
+          same workdir don't clobber each other's outputs.
+
+      Everything else (popSize=200, SBX, mut.simple, seed=42, …) matches the
+      full run, so this is a faithful "short" search rather than a smoke test.
+    -->
+
+    <Algorithm>
+        <NSGA2/>
+    </Algorithm>
+
+    <Genotype>
+        <FloatingPoint>
+            <Entry key="dimension">96</Entry>
+            <Entry key="lbound">0.0</Entry>
+            <Entry key="ubound">31.0</Entry>
+            <Entry key="crx.sbx">1.0</Entry>
+            <Entry key="mut.simple">1.0</Entry>
+        </FloatingPoint>
+    </Genotype>
+
+    <Registry>
+        <Entry key="randomizer.seed">42</Entry>
+        <Entry key="population.size">200</Entry>
+        <Entry key="term.eval">4000</Entry>
+        <Entry key="crx.sbx.ni">20</Entry>
+        <Entry key="mutation.indprob">1.0</Entry>
+        <Entry key="batch.repeats">1</Entry>
+        <Entry key="log.level">3</Entry>
+        <Entry key="log.filename">ecf-5h.log</Entry>
+        <Entry key="log.frequency">1</Entry>
+        <Entry key="milestone.filename">milestone-5h.txt</Entry>
+        <Entry key="milestone.interval">500</Entry>
+    </Registry>
+
+</ECF>
