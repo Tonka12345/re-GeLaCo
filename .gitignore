@@ -22,10 +22,11 @@ server.log
 server-*.log
 ecf.log
 ecf-*.log
-milestone.txt
-milestone-*.txt
-gelaco-*.o*
-gelaco-*.e*
+#milestone.txt
+#milestone-*.txt
+#gelaco-*.o*
+#gelaco-*.e*
+gelaco-smoke.o*
 
 # Smoke-test scratch files (regenerated from sed; see README §6.3)
 ecf/parameters.smoke.txt

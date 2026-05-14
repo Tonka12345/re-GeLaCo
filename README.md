@@ -28,6 +28,15 @@ branch — see its `README.md` for that workflow.
 
 ---
 
+## CURRENT STATUS
+
+**COMPLETED**
+[Run 1](#61a-run-the-5h-variant-current)
+ (5h limit): 4000 evaluations (cca 20 generations), population size 200; artifacts: milestone-5h.txt, gelaco-5h.o938607
+
+**IN PROGRESS**
+[Run 2](#61b-run-the-72h-variant-future) (72h limit): 30000 evaluations (cca 150 generations), population size 200.
+
 ## Table of contents
 
 1. [Algorithm overview](#1-algorithm-overview)

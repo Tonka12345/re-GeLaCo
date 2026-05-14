@@ -32,14 +32,14 @@ NUM_ORIGINAL_LAYERS = 32
 # =============================================================================
 DATASET_NAME = "wikimedia/wikipedia"
 DATASET_CONFIG = "20231101.en"
-NUM_CALIBRATION_SENTENCES = 64  # Start small; scale to 64 later
-MAX_SENTENCE_LENGTH = 128      # Max tokens per sentence
+NUM_CALIBRATION_SENTENCES = 64
+MAX_SENTENCE_LENGTH = 128
 RANDOM_SEED = 42
 
 # =============================================================================
 # Device Configuration
 # =============================================================================
-DEVICE = "cuda"  # Use "cpu" for testing without GPU
+DEVICE = "cuda"
 
 # =============================================================================
 # Server / IPC Configuration (used by server.py)
