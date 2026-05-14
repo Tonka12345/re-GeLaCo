@@ -46,9 +46,10 @@ branch — see its `README.md` for that workflow.
 5. [One-time cluster setup](#5-one-time-cluster-setup)
 6. [Running the full evolutionary search](#6-running-the-full-evolutionary-search)
 7. [Output artifacts](#7-output-artifacts)
-8. [Deviations from the paper](#8-deviations-from-the-paper)
-9. [Memory and runtime budgets](#9-memory-and-runtime-budgets)
-10. [Troubleshooting](#10-troubleshooting)
+8. [Visualization](#8-visualization)
+9. [Deviations from the paper](#9-deviations-from-the-paper)
+10. [Memory and runtime budgets](#10-memory-and-runtime-budgets)
+11. [Troubleshooting](#11-troubleshooting)
 
 ---
 
@@ -141,7 +142,7 @@ The C++ ECF driver runs **NSGA-II** on the 96-D real-valued genotype:
 - **Termination**: paper target is **30,000 fitness evaluations** (~150 generations, ~72 h on a single A100). **Not yet executed** in this repo — current results come from a shorter **4,000-evaluation variant** (~20 generations, ~5 h) configured in [ecf/parameters.5h.txt](ecf/parameters.5h.txt). The full 72 h run is planned future work; see §6.1 for both run modes.
 - **Crossover**: integer-adapted SBX, probability 1.0, η_c = 20
 - **Mutation**: one random gene per individual replaced uniformly within
-  bounds — see §8 for the deviation from the paper's polynomial mutation.
+  bounds — see §9 for the deviation from the paper's polynomial mutation.
 - **Selection**: NSGA-II's standard non-dominated sorting + crowding distance.
 
 ECF's `MOFitnessMin` is used with negated objectives (similarity and
@@ -260,10 +261,15 @@ re-GeLaCo/
 │   ├── parameters.txt              # full search: 30,000 evals, popSize=200
 │   └── parameters.5h.txt           # short variant: 4,000 evals, ~5h walltime
 │
-└── pbs/                            # Cluster job scripts
-    ├── run_evolution.pbs           # full 72h NSGA-II run
-    ├── run_evolution.5h.pbs        # 5h variant (uses parameters.5h.txt)
-    └── run_prototype.pbs           # one-shot diagnostic via evaluator/evaluate.py
+├── pbs/                            # Cluster job scripts
+│   ├── run_evolution.pbs           # full 72h NSGA-II run
+│   ├── run_evolution.5h.pbs        # 5h variant (uses parameters.5h.txt)
+│   └── run_prototype.pbs           # one-shot diagnostic via evaluator/evaluate.py
+│
+└── visualization/                  # Pareto-front plotting (post-processing, local)
+    ├── plot_pareto.py              # parses milestone XML → PNG
+    ├── requirements.txt            # just matplotlib
+    └── pareto_5h.png               # rendered front from the 5h run
 ```
 
 ### What each Python module does
@@ -553,7 +559,7 @@ Healthy signs (either variant):
 - The server log produces `[server …] eval #N ops=… sim=… comp=… (Xs, alloc=…GB)`
   lines steadily. Some lines will be tagged `[NaN→-1.0]` for over-aggressive
   merges that collapse the model to too few layers — this is expected and
-  handled (see §10).
+  handled (see §11).
 - The PBS .o file shows `[GeLaCo] eval=N hits=K hitRate=…%` lines every 50
   evals. `hitRate` typically grows from ~0% in the first few generations to
   20–60% as the population converges.
@@ -618,7 +624,55 @@ paper's curve quality.
 
 ---
 
-## 8. Deviations from the paper
+## 8. Visualization
+
+Post-processing — turning a milestone XML into a Pareto plot. This step is
+**local-only**: matplotlib is not installed on the cluster venv, and there
+is no reason to run a plotting library on an A100. Pull the milestone file
+from the cluster, then plot on your workstation.
+
+### 8.1 One-time setup (local)
+
+```bash
+cd ~/re-GeLaCo
+pip install -r visualization/requirements.txt    # just matplotlib
+```
+
+### 8.2 Generate a plot
+
+```bash
+# from a single run:
+python visualization/plot_pareto.py milestone-5h.txt -o visualization/pareto_5h.png
+
+# overlay the 5h and 72h fronts on one figure (after the 72h run completes):
+python visualization/plot_pareto.py milestone-5h.txt milestone.txt -o visualization/pareto_compare.png
+```
+
+[visualization/plot_pareto.py](visualization/plot_pareto.py) parses every
+`<MOFitness value1="..." value2="..."/>` entry in the file(s), un-negates
+both coordinates (recall §1.4: ECF stores `-similarity`, `-compression`),
+computes the **non-dominated subset under maximization**, and plots:
+
+- **filled markers + line** — the Pareto front (similarity vs compression)
+- **faint dots in the background** — dominated population members
+- **`×` markers at y=0** — NaN-clamped individuals (`sim=-1.0`, see §11),
+  shown so the high-compression edge of the search is visible without
+  distorting the y-axis
+
+Result for the 5h run (committed at
+[visualization/pareto_5h.png](visualization/pareto_5h.png)):
+
+![5h Pareto front](visualization/pareto_5h.png)
+
+The shape is the expected monotone decrease: as compression grows from 12.5%
+to 93.75%, similarity falls from 0.49 to 0.006. The 72h run will fill out
+the high-similarity / low-compression region (currently sparse — only one
+point at 12.5% compression because the random NSGA-II init is biased toward
+many active merges; see §1.4 for the mechanism).
+
+---
+
+## 9. Deviations from the paper
 
 Honest accounting of where ECF 1.6.1's available operator set forced us to
 deviate from paper §4. None of these affect the bi-objective NSGA-II logic
@@ -635,7 +689,7 @@ These deviations are documented in the head comment of
 
 ---
 
-## 9. Memory and runtime budgets
+## 10. Memory and runtime budgets
 
 ### Memory (A100 40 GB)
 
@@ -665,7 +719,7 @@ and for low cache-hit phases early in the search.
 
 ---
 
-## 10. Troubleshooting
+## 11. Troubleshooting
 
 ### Server hangs at `opening req FIFO ... (blocking)`
 Expected. Named-FIFO `open()` blocks until the peer connects. The PBS script
