@@ -769,3 +769,4 @@ Stats: fitness
 	stdev: 0
 
 [GeLaCo] eval=10250 hits=3172 hitRate=30.9463% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=10300 hits=3183 hitRate=30.9029% last=(sim=-1, comp=0.65625)
