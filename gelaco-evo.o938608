@@ -1,0 +1,772 @@
+============================================
+GeLaCo NSGA-II
+============================================
+Job ID:    938608.x3000c0s25b0n0.hsn.hpc.srce.hr
+Node:      x8000c2s5b0n1
+Date:      Thu May 14 10:52:27 CEST 2026
+Workdir:   /lustre/home/tsegvic/workspace/re-GeLaCo
+REQ FIFO:  /tmp/gelaco_req.938608.x3000c0s25b0n0.hsn.hpc.srce.hr
+RSP FIFO:  /tmp/gelaco_rsp.938608.x3000c0s25b0n0.hsn.hpc.srce.hr
+READY:     /tmp/gelaco_ready.938608.x3000c0s25b0n0.hsn.hpc.srce.hr
+ECF_ROOT:  /lustre/home/tsegvic/ecf-install
+
+Thu May 14 10:52:27 2026       
++-----------------------------------------------------------------------------------------+
+| NVIDIA-SMI 565.57.01              Driver Version: 565.57.01      CUDA Version: 12.7     |
+|-----------------------------------------+------------------------+----------------------+
+| GPU  Name                 Persistence-M | Bus-Id          Disp.A | Volatile Uncorr. ECC |
+| Fan  Temp   Perf          Pwr:Usage/Cap |           Memory-Usage | GPU-Util  Compute M. |
+|                                         |                        |               MIG M. |
+|=========================================+========================+======================|
+|   0  NVIDIA A100-SXM4-40GB          On  |   00000000:C1:00.0 Off |                    0 |
+| N/A   35C    P0             55W /  400W |       1MiB /  40960MiB |      0%      Default |
+|                                         |                        |             Disabled |
++-----------------------------------------+------------------------+----------------------+
+                                                                                         
++-----------------------------------------------------------------------------------------+
+| Processes:                                                                              |
+|  GPU   GI   CI        PID   Type   Process name                              GPU Memory |
+|        ID   ID                                                               Usage      |
+|=========================================================================================|
+|  No running processes found                                                             |
++-----------------------------------------------------------------------------------------+
+============================================
+[launch] starting evaluator/server.py
+[launch] server PID=3069042; logs → server.log
+[launch] waiting for /tmp/gelaco_ready.938608.x3000c0s25b0n0.hsn.hpc.srce.hr ...
+[launch] server is ready after 9 polls
+[launch] starting ECF NSGA-II
+-- ECF, version 1.6.1 --
+Parsing configuration file: ecf/parameters.txt
+[GeLaCo] waiting for Python server READY at /tmp/gelaco_ready.938608.x3000c0s25b0n0.hsn.hpc.srce.hr ...
+[GeLaCo] server is ready; opening FIFOs
+[GeLaCo] FIFOs connected
+Start time: Thu May 14 10:53:07 2026
+
+Evaluating initial population...
+[GeLaCo] eval=50 hits=0 hitRate=0% last=(sim=0.025525, comp=0.875)
+[GeLaCo] eval=100 hits=0 hitRate=0% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=150 hits=0 hitRate=0% last=(sim=0.113363, comp=0.75)
+[GeLaCo] eval=200 hits=0 hitRate=0% last=(sim=-1, comp=0.625)
+Generation: 0
+Elapsed time: 829
+Deme: 0
+Evaluations: 200
+Stats: fitness
+	max: 1.91925e+09
+	min: 0
+	avg: 9.69679e+06
+	stdev: 1.35708e+08
+
+Generation: 1
+Elapsed time: 829
+Deme: 0
+Evaluations: 200
+Stats: fitness
+	max: 29
+	min: 1
+	avg: 14.43
+	stdev: 6.49972
+
+[GeLaCo] eval=250 hits=2 hitRate=0.8% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=300 hits=2 hitRate=0.666667% last=(sim=-1, comp=0.75)
+[GeLaCo] eval=350 hits=4 hitRate=1.14286% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=400 hits=5 hitRate=1.25% last=(sim=-1, comp=0.84375)
+Generation: 2
+Elapsed time: 1632
+Deme: 0
+Evaluations: 400
+Stats: fitness
+	max: 15
+	min: 1
+	avg: 12.01
+	stdev: 4.10538
+
+[GeLaCo] eval=450 hits=5 hitRate=1.11111% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=500 hits=6 hitRate=1.2% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=550 hits=7 hitRate=1.27273% last=(sim=0.005265, comp=0.9375)
+[GeLaCo] eval=600 hits=7 hitRate=1.16667% last=(sim=-1, comp=0.90625)
+Generation: 3
+Elapsed time: 2445
+Deme: 0
+Evaluations: 600
+Stats: fitness
+	max: 21
+	min: 1
+	avg: 12.805
+	stdev: 7.16826
+
+[GeLaCo] eval=650 hits=10 hitRate=1.53846% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=700 hits=11 hitRate=1.57143% last=(sim=0.001949, comp=0.84375)
+[GeLaCo] eval=750 hits=13 hitRate=1.73333% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=800 hits=14 hitRate=1.75% last=(sim=-1, comp=0.875)
+Generation: 4
+Elapsed time: 3240
+Deme: 0
+Evaluations: 800
+Stats: fitness
+	max: 20
+	min: 1
+	avg: 10.46
+	stdev: 6.78592
+
+[GeLaCo] eval=850 hits=16 hitRate=1.88235% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=900 hits=17 hitRate=1.88889% last=(sim=-1, comp=0.65625)
+[GeLaCo] eval=950 hits=21 hitRate=2.21053% last=(sim=-1, comp=0.75)
+[GeLaCo] eval=1000 hits=22 hitRate=2.2% last=(sim=-1, comp=0.78125)
+Generation: 5
+Elapsed time: 4032
+Deme: 0
+Evaluations: 1000
+Stats: fitness
+	max: 17
+	min: 1
+	avg: 6.185
+	stdev: 5.39689
+
+[GeLaCo] eval=1050 hits=25 hitRate=2.38095% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=1100 hits=27 hitRate=2.45455% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=1150 hits=30 hitRate=2.6087% last=(sim=0.021869, comp=0.6875)
+[GeLaCo] eval=1200 hits=32 hitRate=2.66667% last=(sim=0.140634, comp=0.6875)
+Generation: 6
+Elapsed time: 4815
+Deme: 0
+Evaluations: 1200
+Stats: fitness
+	max: 7
+	min: 1
+	avg: 2.815
+	stdev: 1.89969
+
+[GeLaCo] eval=1250 hits=41 hitRate=3.28% last=(sim=0.005097, comp=0.9375)
+[GeLaCo] eval=1300 hits=48 hitRate=3.69231% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=1350 hits=54 hitRate=4% last=(sim=0.086668, comp=0.78125)
+[GeLaCo] eval=1400 hits=58 hitRate=4.14286% last=(sim=-1, comp=0.8125)
+Generation: 7
+Elapsed time: 5536
+Deme: 0
+Evaluations: 1400
+Stats: fitness
+	max: 3
+	min: 1
+	avg: 1.45
+	stdev: 0.508718
+
+[GeLaCo] eval=1450 hits=72 hitRate=4.96552% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=1500 hits=80 hitRate=5.33333% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=1550 hits=86 hitRate=5.54839% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=1600 hits=87 hitRate=5.4375% last=(sim=-1, comp=0.90625)
+Generation: 8
+Elapsed time: 6245
+Deme: 0
+Evaluations: 1600
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.25
+	stdev: 0.434099
+
+[GeLaCo] eval=1650 hits=98 hitRate=5.93939% last=(sim=-1, comp=0.78125)
+[GeLaCo] eval=1700 hits=109 hitRate=6.41176% last=(sim=0.046447, comp=0.84375)
+[GeLaCo] eval=1750 hits=117 hitRate=6.68571% last=(sim=0.065468, comp=0.75)
+[GeLaCo] eval=1800 hits=123 hitRate=6.83333% last=(sim=-1, comp=0.875)
+Generation: 9
+Elapsed time: 6925
+Deme: 0
+Evaluations: 1800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=1850 hits=136 hitRate=7.35135% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=1900 hits=149 hitRate=7.84211% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=1950 hits=164 hitRate=8.41026% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=2000 hits=170 hitRate=8.5% last=(sim=-1, comp=0.9375)
+Generation: 10
+Elapsed time: 7560
+Deme: 0
+Evaluations: 2000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=2050 hits=194 hitRate=9.46341% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=2100 hits=205 hitRate=9.7619% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=2150 hits=228 hitRate=10.6047% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=2200 hits=242 hitRate=11% last=(sim=-1, comp=0.875)
+Generation: 11
+Elapsed time: 8092
+Deme: 0
+Evaluations: 2200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=2250 hits=267 hitRate=11.8667% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=2300 hits=296 hitRate=12.8696% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=2350 hits=313 hitRate=13.3191% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=2400 hits=325 hitRate=13.5417% last=(sim=-1, comp=0.84375)
+Generation: 12
+Elapsed time: 8573
+Deme: 0
+Evaluations: 2400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=2450 hits=344 hitRate=14.0408% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=2500 hits=367 hitRate=14.68% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=2550 hits=380 hitRate=14.902% last=(sim=0.001908, comp=0.90625)
+[GeLaCo] eval=2600 hits=398 hitRate=15.3077% last=(sim=-1, comp=0.84375)
+Generation: 13
+Elapsed time: 9092
+Deme: 0
+Evaluations: 2600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=2650 hits=417 hitRate=15.7358% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=2700 hits=434 hitRate=16.0741% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=2750 hits=449 hitRate=16.3273% last=(sim=-1, comp=0.71875)
+[GeLaCo] eval=2800 hits=466 hitRate=16.6429% last=(sim=-1, comp=0.8125)
+Generation: 14
+Elapsed time: 9637
+Deme: 0
+Evaluations: 2800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=2850 hits=487 hitRate=17.0877% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=2900 hits=509 hitRate=17.5517% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=2950 hits=524 hitRate=17.7627% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=3000 hits=538 hitRate=17.9333% last=(sim=-1, comp=0.90625)
+Generation: 15
+Elapsed time: 10161
+Deme: 0
+Evaluations: 3000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=3050 hits=567 hitRate=18.5902% last=(sim=-0.001548, comp=0.9375)
+[GeLaCo] eval=3100 hits=589 hitRate=19% last=(sim=-1, comp=0.75)
+[GeLaCo] eval=3150 hits=616 hitRate=19.5556% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=3200 hits=638 hitRate=19.9375% last=(sim=-1, comp=0.9375)
+Generation: 16
+Elapsed time: 10568
+Deme: 0
+Evaluations: 3200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=3250 hits=667 hitRate=20.5231% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=3300 hits=689 hitRate=20.8788% last=(sim=0.1246, comp=0.78125)
+[GeLaCo] eval=3350 hits=718 hitRate=21.4328% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=3400 hits=746 hitRate=21.9412% last=(sim=-1, comp=0.90625)
+Generation: 17
+Elapsed time: 10940
+Deme: 0
+Evaluations: 3400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=3450 hits=785 hitRate=22.7536% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=3500 hits=815 hitRate=23.2857% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=3550 hits=842 hitRate=23.7183% last=(sim=-1, comp=0.6875)
+[GeLaCo] eval=3600 hits=867 hitRate=24.0833% last=(sim=0.00553, comp=0.9375)
+Generation: 18
+Elapsed time: 11262
+Deme: 0
+Evaluations: 3600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=3650 hits=890 hitRate=24.3836% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=3700 hits=913 hitRate=24.6757% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=3750 hits=943 hitRate=25.1467% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=3800 hits=956 hitRate=25.1579% last=(sim=0.085691, comp=0.90625)
+Generation: 19
+Elapsed time: 11714
+Deme: 0
+Evaluations: 3800
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.505
+	stdev: 0.50123
+
+[GeLaCo] eval=3850 hits=975 hitRate=25.3247% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=3900 hits=994 hitRate=25.4872% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=3950 hits=1006 hitRate=25.4684% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=4000 hits=1018 hitRate=25.45% last=(sim=-1, comp=0.9375)
+Generation: 20
+Elapsed time: 12281
+Deme: 0
+Evaluations: 4000
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.16
+	stdev: 0.367526
+
+[GeLaCo] eval=4050 hits=1029 hitRate=25.4074% last=(sim=-1, comp=0.78125)
+[GeLaCo] eval=4100 hits=1039 hitRate=25.3415% last=(sim=-1, comp=0.71875)
+[GeLaCo] eval=4150 hits=1047 hitRate=25.2289% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=4200 hits=1055 hitRate=25.119% last=(sim=-1, comp=0.90625)
+Generation: 21
+Elapsed time: 12956
+Deme: 0
+Evaluations: 4200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=4250 hits=1062 hitRate=24.9882% last=(sim=-1, comp=0.625)
+[GeLaCo] eval=4300 hits=1079 hitRate=25.093% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=4350 hits=1087 hitRate=24.9885% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=4400 hits=1092 hitRate=24.8182% last=(sim=-1, comp=0.71875)
+Generation: 22
+Elapsed time: 13632
+Deme: 0
+Evaluations: 4400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=4450 hits=1118 hitRate=25.1236% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=4500 hits=1139 hitRate=25.3111% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=4550 hits=1156 hitRate=25.4066% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=4600 hits=1177 hitRate=25.587% last=(sim=-1, comp=0.65625)
+Generation: 23
+Elapsed time: 14105
+Deme: 0
+Evaluations: 4600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=4650 hits=1203 hitRate=25.871% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=4700 hits=1223 hitRate=26.0213% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=4750 hits=1249 hitRate=26.2947% last=(sim=0.040886, comp=0.78125)
+[GeLaCo] eval=4800 hits=1273 hitRate=26.5208% last=(sim=-1, comp=0.84375)
+Generation: 24
+Elapsed time: 14531
+Deme: 0
+Evaluations: 4800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=4850 hits=1300 hitRate=26.8041% last=(sim=-1, comp=0.625)
+[GeLaCo] eval=4900 hits=1325 hitRate=27.0408% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=4950 hits=1348 hitRate=27.2323% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=5000 hits=1367 hitRate=27.34% last=(sim=-1, comp=0.9375)
+Generation: 25
+Elapsed time: 14966
+Deme: 0
+Evaluations: 5000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=5050 hits=1400 hitRate=27.7228% last=(sim=0.005252, comp=0.9375)
+[GeLaCo] eval=5100 hits=1425 hitRate=27.9412% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=5150 hits=1445 hitRate=28.0583% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=5200 hits=1469 hitRate=28.25% last=(sim=-1, comp=0.875)
+Generation: 26
+Elapsed time: 15364
+Deme: 0
+Evaluations: 5200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=5250 hits=1490 hitRate=28.381% last=(sim=0.005604, comp=0.9375)
+[GeLaCo] eval=5300 hits=1507 hitRate=28.434% last=(sim=0.08663, comp=0.90625)
+[GeLaCo] eval=5350 hits=1527 hitRate=28.5421% last=(sim=0.082876, comp=0.71875)
+[GeLaCo] eval=5400 hits=1544 hitRate=28.5926% last=(sim=-1, comp=0.84375)
+Generation: 27
+Elapsed time: 15871
+Deme: 0
+Evaluations: 5400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=5450 hits=1571 hitRate=28.8257% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=5500 hits=1591 hitRate=28.9273% last=(sim=0.260346, comp=0.625)
+[GeLaCo] eval=5550 hits=1613 hitRate=29.0631% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=5600 hits=1635 hitRate=29.1964% last=(sim=-1, comp=0.84375)
+Generation: 28
+Elapsed time: 16316
+Deme: 0
+Evaluations: 5600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=5650 hits=1658 hitRate=29.3451% last=(sim=-1, comp=0.6875)
+[GeLaCo] eval=5700 hits=1678 hitRate=29.4386% last=(sim=0.001218, comp=0.90625)
+[GeLaCo] eval=5750 hits=1695 hitRate=29.4783% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=5800 hits=1714 hitRate=29.5517% last=(sim=-1, comp=0.9375)
+Generation: 29
+Elapsed time: 16805
+Deme: 0
+Evaluations: 5800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=5850 hits=1745 hitRate=29.8291% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=5900 hits=1769 hitRate=29.9831% last=(sim=0.005085, comp=0.9375)
+[GeLaCo] eval=5950 hits=1786 hitRate=30.0168% last=(sim=0.005085, comp=0.9375)
+[GeLaCo] eval=6000 hits=1796 hitRate=29.9333% last=(sim=0.035697, comp=0.875)
+Generation: 30
+Elapsed time: 17282
+Deme: 0
+Evaluations: 6000
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.395
+	stdev: 0.490077
+
+[GeLaCo] eval=6050 hits=1812 hitRate=29.9504% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=6100 hits=1824 hitRate=29.9016% last=(sim=0.003738, comp=0.65625)
+[GeLaCo] eval=6150 hits=1839 hitRate=29.9024% last=(sim=0.085714, comp=0.90625)
+[GeLaCo] eval=6200 hits=1854 hitRate=29.9032% last=(sim=-1, comp=0.875)
+Generation: 31
+Elapsed time: 17866
+Deme: 0
+Evaluations: 6200
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.49
+	stdev: 0.501154
+
+[GeLaCo] eval=6250 hits=1874 hitRate=29.984% last=(sim=0.16191, comp=0.71875)
+[GeLaCo] eval=6300 hits=1886 hitRate=29.9365% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=6350 hits=1894 hitRate=29.8268% last=(sim=0.110649, comp=0.65625)
+[GeLaCo] eval=6400 hits=1907 hitRate=29.7969% last=(sim=-1, comp=0.6875)
+Generation: 32
+Elapsed time: 18479
+Deme: 0
+Evaluations: 6400
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.15
+	stdev: 0.357967
+
+[GeLaCo] eval=6450 hits=1921 hitRate=29.7829% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=6500 hits=1939 hitRate=29.8308% last=(sim=0.285118, comp=0.5625)
+[GeLaCo] eval=6550 hits=1951 hitRate=29.7863% last=(sim=0.001928, comp=0.90625)
+[GeLaCo] eval=6600 hits=1969 hitRate=29.8333% last=(sim=-1, comp=0.75)
+Generation: 33
+Elapsed time: 19055
+Deme: 0
+Evaluations: 6600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=6650 hits=1983 hitRate=29.8195% last=(sim=-1, comp=0.78125)
+[GeLaCo] eval=6700 hits=1988 hitRate=29.6716% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=6750 hits=2003 hitRate=29.6741% last=(sim=-1, comp=0.78125)
+[GeLaCo] eval=6800 hits=2008 hitRate=29.5294% last=(sim=-1, comp=0.8125)
+Generation: 34
+Elapsed time: 19729
+Deme: 0
+Evaluations: 6800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=6850 hits=2027 hitRate=29.5912% last=(sim=-1, comp=0.5)
+[GeLaCo] eval=6900 hits=2045 hitRate=29.6377% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=6950 hits=2062 hitRate=29.6691% last=(sim=0.051582, comp=0.8125)
+[GeLaCo] eval=7000 hits=2079 hitRate=29.7% last=(sim=-1, comp=0.875)
+Generation: 35
+Elapsed time: 20271
+Deme: 0
+Evaluations: 7000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=7050 hits=2094 hitRate=29.7021% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=7100 hits=2110 hitRate=29.7183% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=7150 hits=2124 hitRate=29.7063% last=(sim=-1, comp=0.78125)
+[GeLaCo] eval=7200 hits=2132 hitRate=29.6111% last=(sim=0.070248, comp=0.6875)
+Generation: 36
+Elapsed time: 20884
+Deme: 0
+Evaluations: 7200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=7250 hits=2156 hitRate=29.7379% last=(sim=0.086214, comp=0.90625)
+[GeLaCo] eval=7300 hits=2169 hitRate=29.7123% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=7350 hits=2191 hitRate=29.8095% last=(sim=0.285211, comp=0.5625)
+[GeLaCo] eval=7400 hits=2207 hitRate=29.8243% last=(sim=-1, comp=0.90625)
+Generation: 37
+Elapsed time: 21408
+Deme: 0
+Evaluations: 7400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=7450 hits=2228 hitRate=29.906% last=(sim=0.00553, comp=0.9375)
+[GeLaCo] eval=7500 hits=2256 hitRate=30.08% last=(sim=0.088516, comp=0.90625)
+[GeLaCo] eval=7550 hits=2283 hitRate=30.2384% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=7600 hits=2299 hitRate=30.25% last=(sim=-1, comp=0.875)
+Generation: 38
+Elapsed time: 21866
+Deme: 0
+Evaluations: 7600
+Stats: fitness
+	max: 2
+	min: 1
+	avg: 1.31
+	stdev: 0.463654
+
+[GeLaCo] eval=7650 hits=2313 hitRate=30.2353% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=7700 hits=2326 hitRate=30.2078% last=(sim=0.621337, comp=0.28125)
+[GeLaCo] eval=7750 hits=2335 hitRate=30.129% last=(sim=0.131884, comp=0.6875)
+[GeLaCo] eval=7800 hits=2348 hitRate=30.1026% last=(sim=-1, comp=0.53125)
+Generation: 39
+Elapsed time: 22500
+Deme: 0
+Evaluations: 7800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=7850 hits=2364 hitRate=30.1146% last=(sim=-1, comp=0.75)
+[GeLaCo] eval=7900 hits=2374 hitRate=30.0506% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=7950 hits=2383 hitRate=29.9748% last=(sim=0.252697, comp=0.59375)
+[GeLaCo] eval=8000 hits=2397 hitRate=29.9625% last=(sim=0.285236, comp=0.5625)
+Generation: 40
+Elapsed time: 23136
+Deme: 0
+Evaluations: 8000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=8050 hits=2411 hitRate=29.9503% last=(sim=0.136629, comp=0.78125)
+[GeLaCo] eval=8100 hits=2419 hitRate=29.8642% last=(sim=0.256674, comp=0.5)
+[GeLaCo] eval=8150 hits=2430 hitRate=29.816% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=8200 hits=2445 hitRate=29.8171% last=(sim=0.01313, comp=0.875)
+Generation: 41
+Elapsed time: 23770
+Deme: 0
+Evaluations: 8200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=8250 hits=2465 hitRate=29.8788% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=8300 hits=2483 hitRate=29.9157% last=(sim=-1, comp=0.65625)
+[GeLaCo] eval=8350 hits=2499 hitRate=29.9281% last=(sim=-1, comp=0.46875)
+[GeLaCo] eval=8400 hits=2512 hitRate=29.9048% last=(sim=0.006079, comp=0.9375)
+Generation: 42
+Elapsed time: 24327
+Deme: 0
+Evaluations: 8400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=8450 hits=2530 hitRate=29.9408% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=8500 hits=2547 hitRate=29.9647% last=(sim=0.005098, comp=0.9375)
+[GeLaCo] eval=8550 hits=2562 hitRate=29.9649% last=(sim=0.005073, comp=0.9375)
+[GeLaCo] eval=8600 hits=2572 hitRate=29.907% last=(sim=0.106358, comp=0.8125)
+Generation: 43
+Elapsed time: 24923
+Deme: 0
+Evaluations: 8600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=8650 hits=2597 hitRate=30.0231% last=(sim=0.006079, comp=0.9375)
+[GeLaCo] eval=8700 hits=2609 hitRate=29.9885% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=8750 hits=2618 hitRate=29.92% last=(sim=-1, comp=0.6875)
+[GeLaCo] eval=8800 hits=2630 hitRate=29.8864% last=(sim=-1, comp=0.9375)
+Generation: 44
+Elapsed time: 25513
+Deme: 0
+Evaluations: 8800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=8850 hits=2652 hitRate=29.9661% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=8900 hits=2671 hitRate=30.0112% last=(sim=0.195537, comp=0.6875)
+[GeLaCo] eval=8950 hits=2682 hitRate=29.9665% last=(sim=-1, comp=0.65625)
+[GeLaCo] eval=9000 hits=2696 hitRate=29.9556% last=(sim=0.374741, comp=0.4375)
+Generation: 45
+Elapsed time: 26077
+Deme: 0
+Evaluations: 9000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=9050 hits=2714 hitRate=29.989% last=(sim=0.006079, comp=0.9375)
+[GeLaCo] eval=9100 hits=2737 hitRate=30.0769% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=9150 hits=2752 hitRate=30.0765% last=(sim=-1, comp=0.65625)
+[GeLaCo] eval=9200 hits=2766 hitRate=30.0652% last=(sim=-1, comp=0.8125)
+Generation: 46
+Elapsed time: 26622
+Deme: 0
+Evaluations: 9200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=9250 hits=2789 hitRate=30.1514% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=9300 hits=2809 hitRate=30.2043% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=9350 hits=2821 hitRate=30.1711% last=(sim=0.005085, comp=0.9375)
+[GeLaCo] eval=9400 hits=2833 hitRate=30.1383% last=(sim=-1, comp=0.625)
+Generation: 47
+Elapsed time: 27171
+Deme: 0
+Evaluations: 9400
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=9450 hits=2851 hitRate=30.1693% last=(sim=0.252697, comp=0.59375)
+[GeLaCo] eval=9500 hits=2877 hitRate=30.2842% last=(sim=-1, comp=0.84375)
+[GeLaCo] eval=9550 hits=2889 hitRate=30.2513% last=(sim=-1, comp=0.71875)
+[GeLaCo] eval=9600 hits=2907 hitRate=30.2812% last=(sim=-1, comp=0.875)
+Generation: 48
+Elapsed time: 27698
+Deme: 0
+Evaluations: 9600
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=9650 hits=2929 hitRate=30.3523% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=9700 hits=2949 hitRate=30.4021% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=9750 hits=2963 hitRate=30.3897% last=(sim=-1, comp=0.90625)
+[GeLaCo] eval=9800 hits=2984 hitRate=30.449% last=(sim=-1, comp=0.1875)
+Generation: 49
+Elapsed time: 28212
+Deme: 0
+Evaluations: 9800
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=9850 hits=3009 hitRate=30.5482% last=(sim=-1, comp=0.71875)
+[GeLaCo] eval=9900 hits=3028 hitRate=30.5859% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=9950 hits=3050 hitRate=30.6533% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=10000 hits=3067 hitRate=30.67% last=(sim=-1, comp=0.71875)
+Generation: 50
+Elapsed time: 28701
+Deme: 0
+Evaluations: 10000
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=10050 hits=3091 hitRate=30.7562% last=(sim=-1, comp=0.9375)
+[GeLaCo] eval=10100 hits=3109 hitRate=30.7822% last=(sim=-1, comp=0.8125)
+[GeLaCo] eval=10150 hits=3127 hitRate=30.8079% last=(sim=-1, comp=0.75)
+[GeLaCo] eval=10200 hits=3148 hitRate=30.8627% last=(sim=-1, comp=0.75)
+Generation: 51
+Elapsed time: 29199
+Deme: 0
+Evaluations: 10200
+Stats: fitness
+	max: 1
+	min: 1
+	avg: 1
+	stdev: 0
+
+[GeLaCo] eval=10250 hits=3172 hitRate=30.9463% last=(sim=-1, comp=0.875)
+[GeLaCo] eval=10300 hits=3183 hitRate=30.9029% last=(sim=-1, comp=0.65625)

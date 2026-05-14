@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+venv/
+
+# HuggingFace caches
+.hf_cache/
+.cache/
+
+# OS
+.DS_Store
+
+# C++ build artifacts
+ecf/main.o
+ecf/Evaluate.o
+ecf/gelaco_ecf
+build/
+build.log
+
+# Runtime artifacts (logs, milestones, PBS stdout)
+server.log
+server-*.log
+ecf.log
+ecf-*.log
+#milestone.txt
+#milestone-*.txt
+#gelaco-*.o*
+#gelaco-*.e*
+gelaco-smoke.o*
+
+# Smoke-test scratch files (regenerated from sed; see README §6.3)
+ecf/parameters.smoke.txt
+pbs/run_evolution.smoke.pbs

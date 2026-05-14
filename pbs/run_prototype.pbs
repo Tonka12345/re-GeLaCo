@@ -1,0 +1,55 @@
+#!/bin/bash
+#PBS -N gelaco-proto
+#PBS -q gpu
+#PBS -l select=1:ncpus=8:ngpus=1:mem=64GB
+#PBS -l walltime=02:00:00
+
+# ============================================================
+# GeLaCo Prototype — PBS Job Script for Supek Cluster
+# ============================================================
+# Usage:
+#   qsub run_prototype.pbs
+#
+# Or interactive session:
+#   qsub -I -q gpu -l select=1:ncpus=8:ngpus=1:mem=64GB -l walltime=02:00:00
+# ============================================================
+
+# --- Proxy settings (required on Supek worker nodes) ---
+export http_proxy="http://10.150.1.1:3128"
+export https_proxy="http://10.150.1.1:3128"
+
+# --- HuggingFace settings ---
+# Option 1: set HF_TOKEN here directly
+# export HF_TOKEN="hf_YOUR_TOKEN_HERE"
+# Option 2: set in ~/.bashrc (preferred)
+# echo 'export HF_TOKEN="hf_..."' >> ~/.bashrc
+#
+# Uncomment and set if using a custom cache directory:
+# export HF_HOME="/lustre/home/tsegvic/.hf_cache"
+
+# --- Change to project directory ---
+cd $PBS_O_WORKDIR
+
+# --- Activate virtual environment ---
+source venv/bin/activate
+
+# --- Print environment info ---
+echo "============================================"
+echo "GeLaCo Prototype - Job Info"
+echo "============================================"
+echo "Job ID:     $PBS_JOBID"
+echo "Node:       $(hostname)"
+echo "Date:       $(date)"
+echo "Directory:  $(pwd)"
+echo "Python:     $(which python)"
+echo ""
+nvidia-smi
+echo "============================================"
+
+# --- Run the prototype ---
+python evaluator/evaluate.py
+
+echo ""
+echo "============================================"
+echo "Job completed at: $(date)"
+echo "============================================"
