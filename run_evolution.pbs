@@ -64,15 +64,18 @@ nvidia-smi || true
 echo "============================================"
 
 # --- Cleanup hook -----------------------------------------------------------
+# Idempotent and runs at most once even if the trap fires for both EXIT and TERM.
+CLEANUP_DONE=0
 cleanup() {
+    [ "$CLEANUP_DONE" -eq 1 ] && return
+    CLEANUP_DONE=1
     echo "[cleanup] tearing down"
-    # Politely ask the server to quit, then wait briefly.
     if [ -n "${PY_PID:-}" ] && kill -0 "$PY_PID" 2>/dev/null; then
-        # The FIFO writer may block if no reader; use a timeout-safe approach.
-        ( echo "QUIT" > "$REQ" ) &
-        QUITTER=$!
-        wait $QUITTER 2>/dev/null || true
-        # Give it 30 s to exit, then SIGTERM, then SIGKILL.
+        # Politely ask the server to QUIT via the req FIFO, but bound the wait:
+        # if the server is already dead and no reader is attached, opening the
+        # FIFO for write blocks forever. `timeout 5` caps that at 5 s, after
+        # which we fall through to SIGTERM/SIGKILL below.
+        timeout 5 sh -c "echo QUIT > '$REQ'" 2>/dev/null || true
         for i in $(seq 1 30); do
             kill -0 "$PY_PID" 2>/dev/null || break
             sleep 1
@@ -82,6 +85,7 @@ cleanup() {
         kill -0 "$PY_PID" 2>/dev/null && kill -9 "$PY_PID" 2>/dev/null
     fi
     rm -f "$REQ" "$RSP" "$READY"
+    echo "[cleanup] done"
 }
 trap cleanup EXIT INT TERM
 
