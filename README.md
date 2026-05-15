@@ -776,13 +776,11 @@ authoritative.
 
 ## 12. Future work
 
-A few directions that would extend this reproduction beyond paper parity:
+A few directions that would extend this reproduction:
 
 - **More expressive genotype**: split the activation bit into its own
   fixed-length genotype, separate from the integer (b, e) layer-index
-  genotype. This avoids the awkward "threshold a continuous gene at 15.5"
-  trick from §4.2 (where a single ECF `FloatingPoint` genotype encodes both
-  layer indices and the boolean activation), and gives ECF cleaner per-genotype
+  genotype. This gives ECF cleaner per-genotype
   variation operators: integer SBX/polynomial on the index genotype, bit-flip
   mutation on the activation genotype. ECF supports multi-genotype
   individuals via repeated `<Genotype>` blocks, so this is an architectural
