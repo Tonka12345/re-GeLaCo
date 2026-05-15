@@ -643,13 +643,7 @@ python visualization/plot_pareto.py milestone-5h.txt milestone.txt -o visualizat
 [visualization/plot_pareto.py](visualization/plot_pareto.py) parses every
 `<MOFitness value1="..." value2="..."/>` entry in the file(s), un-negates
 both coordinates (recall §1.4: ECF stores `-similarity`, `-compression`),
-computes the **non-dominated subset under maximization**, and plots:
-
-- **filled markers + line** — the Pareto front (similarity vs compression)
-- **faint dots in the background** — dominated population members
-- **`×` markers at y=0** — NaN-clamped individuals (`sim=-1.0`, see §11),
-  shown so the high-compression edge of the search is visible without
-  distorting the y-axis
+computes the **non-dominated subset under maximization**, and plots the pareto front.
 
 Comparison of both runs (5h in blue, full run in orange):
 
