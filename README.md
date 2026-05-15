@@ -23,11 +23,10 @@ branch — see its `README.md` for that workflow.
 ## CURRENT STATUS
 
 **COMPLETED**
-[Run 1](#61a-run-the-5h-variant-current)
- (5h limit): 4000 evaluations (cca 20 generations), population size 200; artifacts: milestone-5h.txt, gelaco-5h.o938607
+Run 1 (5h limit): 4,000 evaluations (~20 generations), population size 200; artifacts: `milestone-5h.txt`, `gelaco-5h.o938607`
 
-**IN PROGRESS**
-[Run 2](#61b-run-the-72h-variant-future) (72h limit): 30000 evaluations (cca 150 generations), population size 200.
+**COMPLETED**
+Run 2 (72h limit): 30,000 evaluations (150 generations), population size 200, ~25.7h wall time; artifacts: `milestone-full.txt`, `gelaco-evo-full.o938608`
 
 ## Table of contents
 
@@ -131,7 +130,7 @@ Both objectives are in `[0, 1]` and both are **maximized**. See
 The C++ ECF driver runs **NSGA-II** on the 96-D real-valued genotype:
 
 - **Population**: 200 individuals
-- **Termination**: paper target is **30,000 fitness evaluations** (~150 generations, ~72 h on a single A100). **Not yet executed** in this repo — current results come from a shorter **4,000-evaluation variant** (~20 generations, ~5 h) configured in [ecf/parameters.5h.txt](ecf/parameters.5h.txt). The full 72 h run is planned future work; see §6.1 for both run modes.
+- **Termination**: paper target is **30,000 fitness evaluations** (~150 generations). Two runs were executed: a **5h variant** (4,000 evals, ~20 generations) and a **full variant** (30,000 evals, 150 generations, ~25.7h). The full-run Pareto front shows clear improvement over the 5h front; see §8 for plots. See §6.1 for both run modes.
 - **Crossover**: integer-adapted SBX, probability 1.0, η_c = 20
 - **Mutation**: one random gene per individual replaced uniformly within
   bounds — see §9 for the deviation from the paper's polynomial mutation.
@@ -261,7 +260,9 @@ re-GeLaCo/
 └── visualization/                  # Pareto-front plotting (post-processing, local)
     ├── plot_pareto.py              # parses milestone XML → PNG
     ├── requirements.txt            # just matplotlib
-    └── pareto_5h.png               # rendered front from the 5h run
+    ├── pareto_4000.png             # rendered front from the 5h run (4,000 evals)
+    ├── pareto_full.png             # rendered front from the full run (~10,300 evals)
+    └── pareto_compare.png          # overlay of both fronts on one figure
 ```
 
 ### What each Python module does
@@ -492,14 +493,14 @@ in the same workdir.
 
 | Script | Evals | Generations | Walltime | Output suffix | Status |
 |---|---|---|---|---|---|
-| [pbs/run_evolution.5h.pbs](pbs/run_evolution.5h.pbs) | 4,000 | ~20 | 5 h | `*-5h.{log,txt}` | **Currently used.** Faster to schedule on shared queues; produces a real Pareto front but at lower convergence than the paper. |
-| [pbs/run_evolution.pbs](pbs/run_evolution.pbs) | 30,000 | ~150 | 72 h | `*.{log,txt}` (no suffix) | **Planned future work — not yet executed.** Paper-faithful; needs a 72 h slot in the GPU queue. |
+| [pbs/run_evolution.5h.pbs](pbs/run_evolution.5h.pbs) | 4,000 | ~20 | 5 h | `*-5h.*` | **COMPLETED.** Produces a real Pareto front but at lower convergence than the paper. Artifacts: `milestone-5h.txt`, `gelaco-5h.o938607`. |
+| [pbs/run_evolution.pbs](pbs/run_evolution.pbs) | 30,000 | 150 | 72 h | `*-full.*` | **COMPLETED.** Ran to completion in ~25.7 h. Produces a substantially better front than the 5h run. Artifacts: `milestone-full.txt`, `gelaco-evo-full.o938608`. |
 
 Both share the same population size (200), seed, NSGA-II hyperparameters,
 and Python evaluator. The only differences are `term.eval` in the params
 file and the log/milestone filenames.
 
-#### 6.1.a Run the 5h variant (current)
+#### 6.1.a Run the 5h variant
 
 ```bash
 cd ~/re-GeLaCo
@@ -509,7 +510,7 @@ qstat -u $USER                # watch state Q → R → C
 
 Outputs: `server-5h.log`, `ecf-5h.log`, `milestone-5h.txt`, `gelaco-5h.o<JOBID>`.
 
-#### 6.1.b Run the 72h variant (future)
+#### 6.1.b Run the full variant
 
 ```bash
 cd ~/re-GeLaCo
@@ -517,7 +518,7 @@ qsub pbs/run_evolution.pbs
 qstat -u $USER
 ```
 
-Outputs: `server.log`, `ecf.log`, `milestone.txt`, `gelaco-evo.o<JOBID>`.
+Outputs: `server-full.log`, `ecf-full.log`, `milestone-full.txt`, `gelaco-evo-full.o<JOBID>`.
 
 #### What the PBS script does (both variants)
 
@@ -545,7 +546,7 @@ tail -f ~/re-GeLaCo/gelaco-5h.o*          # combined PBS stdout/stderr
 tail -f ~/re-GeLaCo/ecf-5h.log            # ECF NSGA-II per-generation stats
 ```
 
-For the 72h run, drop the `-5h` suffix (`server.log`, `ecf.log`, `gelaco-evo.o*`).
+For the full run, substitute the `-5h` suffix with `-full` (`server-full.log`, `ecf-full.log`, `gelaco-evo-full.o*`).
 
 Healthy signs (either variant):
 - The server log produces `[server …] eval #N ops=… sim=… comp=… (Xs, alloc=…GB)`
@@ -585,7 +586,7 @@ A successful smoke run completes in a few minutes, produces ~20 well-formed
 ### 6.4 Reading the result
 
 The deliverable is the **final Pareto archive** in the milestone file —
-`milestone-5h.txt` for the 5h variant, `milestone.txt` for the 72h variant.
+`milestone-5h.txt` for the 5h variant, `milestone-full.txt` for the full variant.
 ECF uses `MOFitnessMin` with negated objectives, so the two values stored per
 individual are `(-similarity, -compression)`. Flip both signs to recover the
 paper's Fig. 3 orientation: similarity on the y-axis, compression on the x-axis.
@@ -594,25 +595,19 @@ paper's Fig. 3 orientation: similarity on the y-axis, compression on the x-axis.
 
 ## 7. Output artifacts
 
-Filenames depend on which variant was launched. Below, `*` means either
-`-5h` (for `pbs/run_evolution.5h.pbs`) or empty string (for the
-yet-to-be-run `pbs/run_evolution.pbs`); for the 72h variant the PBS .o
-file is `gelaco-evo.o<JOBID>` instead of `gelaco-5h.o<JOBID>`.
-
 | Path | Producer | Contents |
 |---|---|---|
-| `gelaco-{evo,5h}.o<JOBID>` | PBS | Combined stdout+stderr of the launcher, server, and ECF. |
-| `server*.log` | evaluator/server.py | One `[server …] eval #N ops=… sim=… comp=… (…s, alloc=…GB)` line per evaluation. NaN-clamped evals are tagged `[NaN→-1.0]`. |
-| `ecf*.log` | ECF | Per-generation `Stats: fitness …` (NSGA-II reports a rank-like scalar here — the real two objectives are in the milestone file). |
-| `milestone*.txt` | ECF | XML snapshot of the population and Pareto archive every 500 evals. **Objectives are negated** (`MOFitnessMin`); flip signs to plot in paper-Fig. 3 orientation. |
+| `gelaco-5h.o<JOBID>` | PBS | PBS combined stdout+stderr for the 5h run. |
+| `gelaco-evo-full.o<JOBID>` | PBS | PBS combined stdout+stderr for the full run. |
+| `server-{5h,full}.log` | evaluator/server.py | One `[server …] eval #N ops=… sim=… comp=… (…s, alloc=…GB)` line per evaluation. NaN-clamped evals are tagged `[NaN→-1.0]`. |
+| `ecf-{5h,full}.log` | ECF | Per-generation `Stats: fitness …` (NSGA-II reports a rank-like scalar here — the real two objectives are in the milestone file). |
+| `milestone-{5h,full}.txt` | ECF | XML snapshot of the population and Pareto archive every 500 evals. **Objectives are negated** (`MOFitnessMin`); flip signs to plot in paper-Fig. 3 orientation. |
 | stderr of ECF | C++ driver | `[GeLaCo] eval=N hits=K hitRate=…% last=(sim=…, comp=…)` every 50 evals. A healthy run grows `hitRate` from ~0% early to ~20–60% late as the population converges. |
 
 **Post-processing into a Pareto plot:** parse the milestone file, extract the
 final generation's individuals' two objectives, negate them, plot `compression`
 on x and `similarity` on y. Expected shape: monotone-decreasing similarity as
-compression grows (paper Fig. 3). The 5h variant produces a working but
-under-converged front (~20 generations); the 72h run is needed to match the
-paper's curve quality.
+compression grows (paper Fig. 3). See §8 for the generated plots.
 
 ---
 
@@ -633,11 +628,12 @@ pip install -r visualization/requirements.txt    # just matplotlib
 ### 8.2 Generate a plot
 
 ```bash
-# from a single run:
+# single run:
 python visualization/plot_pareto.py milestone-5h.txt -o visualization/pareto_5h.png
+python visualization/plot_pareto.py milestone-full.txt -o visualization/pareto_full.png
 
-# overlay the 5h and 72h fronts on one figure (after the 72h run completes):
-python visualization/plot_pareto.py milestone-5h.txt milestone.txt -o visualization/pareto_compare.png
+# overlay both fronts on one figure:
+python visualization/plot_pareto.py milestone-5h.txt milestone-full.txt -o visualization/pareto_compare.png
 ```
 
 [visualization/plot_pareto.py](visualization/plot_pareto.py) parses every
@@ -651,16 +647,17 @@ computes the **non-dominated subset under maximization**, and plots:
   shown so the high-compression edge of the search is visible without
   distorting the y-axis
 
-Result for the 5h run (committed at
-[visualization/pareto_5h.png](visualization/pareto_4000.png)):
+Comparison of both runs (5h in blue, full run in orange):
 
-![5h Pareto front](visualization/pareto_4000.png)
+![Pareto front comparison](visualization/pareto_compare.png)
 
-The shape is the expected monotone decrease: as compression grows from 12.5%
-to 93.75%, similarity falls from 0.49 to 0.006. The 72h run will fill out
-the high-similarity / low-compression region (currently sparse — only one
-point at 12.5% compression because the random NSGA-II init is biased toward
-many active merges; see §1.4 for the mechanism).
+The full run (30,000 evals, 150 generations, ~25.7h) substantially dominates
+the 5h front (4,000 evals, ~20 generations): similarity at 12.5% compression
+improves from 0.49 → 0.85, and the front covers the entire compression range
+with 26 non-dominated points (vs 14 in the 5h run). The full run reaches
+sim=1.0 at comp=0.0 (the uncompressed model). Compared to the paper's Fig. 3,
+the front is slightly lower at low compression (sim ≈ 0.85 vs ~0.9 at 12.5%);
+see §9 for the likely causes.
 
 ---
 
@@ -678,6 +675,20 @@ itself; they affect only the per-gene variation distribution.
 
 These deviations are documented in the head comment of
 [ecf/parameters.txt](ecf/parameters.txt).
+
+**Effect on results:** The full-run Pareto front (§8) is slightly below the
+paper's Fig. 3 curve (roughly 0.05–0.10 in similarity at equivalent
+compression). Likely contributing factors, in descending order of impact:
+
+1. **`mut.simple` vs polynomial mutation**: uniform gene replacement is more
+   disruptive than local polynomial perturbation in later generations, when
+   good solutions exist and small nudges are more valuable than global resets.
+   Polynomial mutation is not available in ECF 1.6.1 for `FloatingPoint`.
+2. **Random-init bias toward high compression**: each triple draws `b, e`
+   uniformly from `[0, 31]` with 50% activation probability, so the average
+   initial individual has ~16 of 32 triples active and removes most of the
+   model. Early generations are dominated by NaN-clamped individuals; evolution
+   must "discover" low-compression configurations from scratch.
 
 ---
 
