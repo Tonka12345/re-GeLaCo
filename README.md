@@ -308,9 +308,6 @@ There are three places parameters live, depending on which side owns them.
 
 ### 4.2 ECF-side ([ecf/parameters.txt](ecf/parameters.txt))
 
-XML schema is ECF's. Keys are the **registered names** found in ECF 1.6.1's
-`Population.cpp`, `TermMaxEvalOp.cpp`, `Mutation.cpp`, and
-`floatingpoint/FloatingPointCrsSbx.cpp` / `FloatingPointMutSimple.cpp`.
 
 ```xml
 <Algorithm>
